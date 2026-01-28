@@ -2,7 +2,6 @@ name: Run Doctor Scraper V6 (Infinite Loop Edition)
 
 on:
   workflow_dispatch:
-  # Това позволява на скрипта да trigger-не сам себе си:
   repository_dispatch:
     types: [continue-scraping]
 
@@ -12,11 +11,14 @@ permissions:
 jobs:
   scrape-job:
     runs-on: ubuntu-latest
-    timeout-minutes: 360 # 6 hours hard limit
+    timeout-minutes: 350
 
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v4
+        with:
+          # Трябва да изтеглим кода с твоя токен, за да можем да push-ваме processed_ids.txt без драми
+          token: ${{ secrets.MY_PAT }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -45,13 +47,19 @@ jobs:
           fi
 
       - name: Commit Progress Log
+        if: steps.check_flag.outputs.continue == 'true' || always()
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action Bot"
-          # Само ако има промяна в processed_ids.txt
-          git add script/processed_ids.txt
-          git commit -m "Update processed IDs progress [skip ci]" || echo "No changes to commit"
-          git push
+          git config --global user.email "action@github.com"
+          git config --global user.name "GitHub Action Bot"
+          
+          # Проверяваме дали има промени
+          if [[ -n $(git status -s script/processed_ids.txt) ]]; then
+            git add script/processed_ids.txt
+            git commit -m "Update processed IDs progress [skip ci]"
+            git push
+          else
+            echo "No progress to save yet."
+          fi
 
       - name: Upload Batch Artifact
         if: always() 
@@ -65,5 +73,6 @@ jobs:
         if: steps.check_flag.outputs.continue == 'true'
         uses: peter-evans/repository-dispatch@v3
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # ЕТО ТУК Е РАЗЛИКАТА, БЕ ГАЩНИК:
+          token: ${{ secrets.MY_PAT }}
           event-type: continue-scraping
