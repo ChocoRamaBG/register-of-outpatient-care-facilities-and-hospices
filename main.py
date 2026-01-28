@@ -6,14 +6,23 @@ import random
 import sys
 import shutil
 import re
+from datetime import datetime
 
 # --- CONFIGURATION ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 INPUT_FILENAME = "BG_Medical_Registry_FULL.xlsx" 
 INPUT_FILE_PATH = os.path.join(SCRIPT_DIR, INPUT_FILENAME)
+PROCESSED_LOG_FILE = os.path.join(SCRIPT_DIR, "processed_ids.txt") # Тук ще пазим ID-тата на готовите пациентчовци
+CONTINUE_FLAG_FILE = "CONTINUE_FLAG" # Флагче за рестарт
 
-# Output file
-OUTPUT_FILE = os.path.join(SCRIPT_DIR, 'FINAL_DOCTORS_V6_DOTLESS.xlsx')
+# Safety margin: GitHub kills at 6h. We stop at 5h 40m just to be safe.
+# 5 hours * 3600 + 40 mins * 60 = 18000 + 2400 = 20400 seconds.
+MAX_RUNTIME_SECONDS = 20400 
+START_TIME = time.time()
+
+# Output file (Dynamic naming to avoid overwriting)
+TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
+OUTPUT_FILE = os.path.join(SCRIPT_DIR, f'FINAL_DOCTORS_BATCH_{TIMESTAMP}.xlsx')
 
 headers = {
     'accept': '*/*',
@@ -22,54 +31,58 @@ headers = {
     'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0'
 }
 
-# --- THE CHAINSAW CLEANER V6 (Now with Dot-Removal) ---
+# --- THE CHAINSAW CLEANER V6 (Dotless Edition) ---
 def clean_bg_address(raw_addr):
     if not raw_addr or not isinstance(raw_addr, str):
         return ""
     
-    # 1. Basic purge
-    # Махаме №, кавички и символа за номер
+    # Brainrot sanitization protocols active
     clean = raw_addr.replace('№', ' ').replace('"', '').replace('„', '').replace('“', '').replace("'", "").replace("`", "")
-    
-    # 2. Bracket killer (Маха всичко в скоби)
     clean = re.sub(r'\(.*?\)', '', clean)
     clean = re.sub(r'/.*?/', '', clean)
 
-    # 3. Geo junk removal (Маха Обл. и Общ.)
     clean = re.sub(r'Обл\.\s*[^,]+,?','', clean, flags=re.IGNORECASE)
     clean = re.sub(r'област\s*[^,]+,?','', clean, flags=re.IGNORECASE)
     clean = re.sub(r'общ\.\s*[^,]+,?','', clean, flags=re.IGNORECASE)
     clean = re.sub(r'община\s*[^,]+,?','', clean, flags=re.IGNORECASE)
 
-    # 4. The cutoff logic (Реже всичко след етаж, ап, кабинет и т.н.)
     cutoff_pattern = r'[,\s]+(ет\.|етаж|ап\.|апартамент|каб\.|кабинет|стая|офис|помещение|маг\.|магазин|обект|партер|сутерен|поликлиника|здравна служба|болница).*$'
     clean = re.sub(cutoff_pattern, '', clean, flags=re.IGNORECASE)
-
-    # 5. Cleanup
     clean = re.sub(r'УПИ\s*[0-9XIV-]+', '', clean, flags=re.IGNORECASE)
     
-    # Оправяме двойни разстояния и запетаи
     clean = re.sub(r'\s+,', ',', clean)
     clean = re.sub(r',+', ',', clean)
     clean = re.sub(r'\s+', ' ', clean)
     
-    # --- THE FIX: STRIP DOTS TOO ---
-    # Това маха запетаи (,), точки (.) и интервали ( ) от двата края
     return clean.strip(', .')
+
+def get_processed_ids():
+    """Reads the list of ID-chovtsi we already destroyed."""
+    if not os.path.exists(PROCESSED_LOG_FILE):
+        return set()
+    with open(PROCESSED_LOG_FILE, 'r', encoding='utf-8') as f:
+        # Reading lines like a Sigma reader
+        return set(line.strip() for line in f if line.strip())
+
+def save_processed_id(id_val):
+    """Appends a completed ID to the log file immediately."""
+    with open(PROCESSED_LOG_FILE, 'a', encoding='utf-8') as f:
+        f.write(f"{id_val}\n")
 
 def load_ids_from_col_b():
     print(f"Yo shefe, targeting: {INPUT_FILE_PATH}")
     if not os.path.exists(INPUT_FILE_PATH):
-        print("Faila go nyama. Slagay go pri skripta.")
+        print("Faila go nyama. Slagay go pri skripta, lyolyo.")
         sys.exit(1)
     
+    # Reading excel... hope your RAM has enough rizz
     temp_file = os.path.join(SCRIPT_DIR, "temp_brainrot_copy.xlsx")
     try:
         shutil.copy2(INPUT_FILE_PATH, temp_file)
         df = pd.read_excel(temp_file, dtype=str)
         
         if df.shape[1] < 2:
-            print("!!! GRESHKA: Tozi fail nyama Kolona B.")
+            print("!!! GRESHKA: Tozi fail nyama Kolona B. Negative IQ moment.")
             os.remove(temp_file)
             sys.exit(1)
 
@@ -85,7 +98,7 @@ def load_ids_from_col_b():
                 clean_list.append(s_val)
             except: continue
         
-        print(f"Loaded {len(clean_list)} IDs.")
+        print(f"Loaded {len(clean_list)} total ID-chovtsi.")
         del df 
         try: os.remove(temp_file)
         except: pass
@@ -95,19 +108,19 @@ def load_ids_from_col_b():
         sys.exit(1)
 
 def fetch_details(id_number):
+    # API endpoint goes brrr
     url = f'https://registries.his.bg/api/V1/outpatientcare/getOutpatientCareByNumberForApiV1?number={id_number}'
     try:
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code == 200:
             return response.json()
         elif response.status_code == 404:
-            print(f"    [-] ID {id_number} not found.")
             return None
         else:
             print(f"    [!] Error {response.status_code} for ID {id_number}.")
             return None
     except Exception as e:
-        print(f"    [!] Network crash on {id_number}: {e}")
+        print(f"    [!] Network died (Skill Issue) on {id_number}: {e}")
         return None
 
 def parse_data(records, all_hospitals, all_addresses, all_doctors):
@@ -147,13 +160,11 @@ def parse_data(records, all_hospitals, all_addresses, all_doctors):
         if addrs and isinstance(addrs, list):
             for ad in addrs:
                 raw_full_addr = ad.get('fulladdress', '')
-                
-                # CLEANER RUNS HERE
                 clean_addr = clean_bg_address(raw_full_addr)
-
+                
                 addr_specs = ad.get('specialities', [])
                 addr_spec_str = ", ".join([s.get('label', '') for s in addr_specs]) if addr_specs else ""
-
+                
                 addr_acts = ad.get('activities', [])
                 addr_act_str = ", ".join([a.get('label', '') for a in addr_acts]) if addr_acts else ""
 
@@ -208,47 +219,76 @@ def save_multisheet_excel(hospitals, addresses, doctors):
             df_h.to_excel(writer, sheet_name='Hospitals', index=False)
             df_a.to_excel(writer, sheet_name='Addresses', index=False)
             df_d.to_excel(writer, sheet_name='Doctors', index=False)
-        
+        print(f"SAVED BATCH: {OUTPUT_FILE}")
     except Exception as e:
         print(f"!!! CRITICAL: Failed to save Excel: {e}")
 
 def main_loop():
-    ids = load_ids_from_col_b()
-    total_count = len(ids)
+    # 1. Load targets
+    all_ids = load_ids_from_col_b()
+    
+    # 2. Load already done IDs
+    processed_ids = get_processed_ids()
+    print(f"History check: We have already roasted {len(processed_ids)} ID-chovtsi.")
+
+    # 3. Filter list
+    pending_ids = [x for x in all_ids if x not in processed_ids]
+    total_pending = len(pending_ids)
+    
+    if total_pending == 0:
+        print("Nothing left to do. Ez clap. GG WP.")
+        return
+
+    print(f"--- STARTING BATCH (Targets Left: {total_pending}) ---")
     
     all_hospitals = []
     all_addresses = []
     all_doctors = []
     
-    print(f"--- STARTING V6 (Total Targets: {total_count}) ---")
+    batch_counter = 0
+    save_interval = 100 # Optional: intermediate in-memory flush if needed, but we rely on huge batch at end or timeout
     
-    for i, id_number in enumerate(ids):
-        percent_done = ((i + 1) / total_count) * 100
-        
-        print(f"[{i+1}/{total_count}] >> {percent_done:.2f}% << Processing: {id_number}...")
+    for i, id_number in enumerate(pending_ids):
+        # --- TIME CHECK ---
+        elapsed = time.time() - START_TIME
+        if elapsed > MAX_RUNTIME_SECONDS:
+            print("\n!!! TIME LIMIT REACHED !!!")
+            print("Initiating emergency save protocol. Skibidi bop mm dada.")
+            
+            # Create a flag file to tell GitHub to restart
+            with open(CONTINUE_FLAG_FILE, 'w') as f:
+                f.write("MORE_BLOOD")
+            
+            break # Break the loop to save and exit
+
+        # --- LOGIC ---
+        percent_done = ((i + 1) / total_pending) * 100
+        print(f"[{i+1}/{total_pending}] >> {percent_done:.2f}% << Processing: {id_number}...")
         
         data = fetch_details(id_number)
         
-        found_new = False
         if data:
             parse_data(data, all_hospitals, all_addresses, all_doctors)
-            found_new = True
+            # Log as done only after parsing
+            save_processed_id(id_number)
+            batch_counter += 1
             print(f"    [+] Data Acquired.")
+        else:
+            # Even if 404 or Error, mark as processed so we don't retry forever
+            # Or maybe you want to retry? Assuming we skip bad ones:
+            save_processed_id(id_number)
+            print(f"    [-] Skipped.")
         
-        if found_new:
-            save_multisheet_excel(all_hospitals, all_addresses, all_doctors)
-        
+        # Sleep to avoid WAF ban-chovtsi
         sleep_time = random.uniform(0.5, 1.2)
         time.sleep(sleep_time)
 
-    print("--- DONE ---")
-    print(f"Final Completeness: 100.00% - No dots, no glory.")
-    
+    # --- FINAL SAVE FOR THIS RUN ---
     if all_hospitals:
+        print("Saving harvested soul-chovtsi to Excel...")
         save_multisheet_excel(all_hospitals, all_addresses, all_doctors)
-        print(f"File saved at: {OUTPUT_FILE}")
     else:
-        print("We got nothing. L + Ratio.")
+        print("No valid data found in this batch. L.")
 
 if __name__ == "__main__":
     main_loop()
