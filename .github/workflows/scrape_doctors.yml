@@ -1,0 +1,41 @@
+name: Run Doctor Scraper V6
+
+# Това позволява да го пускаш ръчно с бутонче (Manual Trigger)
+on:
+  workflow_dispatch:
+
+jobs:
+  scrape-job:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350 # Даваме му почти 6 часа (максимума на GitHub)
+
+    steps:
+      # 1. Изтегля кода и файловете от репото
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      # 2. Инсталира Python
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      # 3. Инсталира библиотеките от requirements.txt
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+
+      # 4. Пуска скрипта (main.py)
+      - name: Run the Heist
+        run: |
+          python main.py
+
+      # 5. Запазва резултата като Artifact (за да можеш да го свалиш)
+      # Използваме "if: always()", за да запази файла дори ако скриптът гръмне по средата!
+      - name: Upload Loot
+        if: always() 
+        uses: actions/upload-artifact@v4
+        with:
+          name: FLATTENED_DATA_V6
+          path: FINAL_DOCTORS_V6_DOTLESS.xlsx
+          retention-days: 5
