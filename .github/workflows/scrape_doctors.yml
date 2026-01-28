@@ -2,6 +2,7 @@ name: Run Doctor Scraper V6 (Infinite Loop Edition)
 
 on:
   workflow_dispatch:
+  # Това позволява на скрипта да trigger-не сам себе си:
   repository_dispatch:
     types: [continue-scraping]
 
@@ -11,13 +12,13 @@ permissions:
 jobs:
   scrape-job:
     runs-on: ubuntu-latest
-    timeout-minutes: 350
+    timeout-minutes: 350 # 6 hours hard limit (GitHub rules)
 
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v4
         with:
-          # Трябва да изтеглим кода с твоя токен, за да можем да push-ваме processed_ids.txt без драми
+          # Трябва да изтеглим кода с твоя токен (MY_PAT), за да работи лупа
           token: ${{ secrets.MY_PAT }}
 
       - name: Set up Python
@@ -32,11 +33,13 @@ jobs:
       - name: Run the Heist
         id: run_script
         run: |
-          python script/main.py
+          # ВЕЧЕ Е БЕЗ 'script/' ОТПРЕД, ЩОТО ФАЙЛЪТ ТИ Е В ROOT
+          python main.py
 
       - name: Check for Continuation Flag
         id: check_flag
         run: |
+          # Проверяваме за флаг файла в root директорията
           if [ -f "CONTINUE_FLAG" ]; then
             echo "continue=true" >> $GITHUB_OUTPUT
             echo "Time limit hit. Scheduling next run..."
@@ -52,9 +55,9 @@ jobs:
           git config --global user.email "action@github.com"
           git config --global user.name "GitHub Action Bot"
           
-          # Проверяваме дали има промени
-          if [[ -n $(git status -s script/processed_ids.txt) ]]; then
-            git add script/processed_ids.txt
+          # ТУК СЪЩО МАХНАХМЕ 'script/' ПРЕД processed_ids.txt
+          if [[ -n $(git status -s processed_ids.txt) ]]; then
+            git add processed_ids.txt
             git commit -m "Update processed IDs progress [skip ci]"
             git push
           else
@@ -66,13 +69,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: DOCTORS_BATCH_${{ github.run_id }}_${{ github.run_attempt }}
-          path: script/FINAL_DOCTORS_BATCH_*.xlsx
+          # И ТУК МАХНАХМЕ 'script/'
+          path: FINAL_DOCTORS_BATCH_*.xlsx
           retention-days: 14
 
       - name: Trigger Next Run
         if: steps.check_flag.outputs.continue == 'true'
         uses: peter-evans/repository-dispatch@v3
         with:
-          # ЕТО ТУК Е РАЗЛИКАТА, БЕ ГАЩНИК:
+          # ТОВА Е ВАЖНОТО - ПОЛЗВА ТВОЯ PAT ТОКЕН
           token: ${{ secrets.MY_PAT }}
           event-type: continue-scraping
