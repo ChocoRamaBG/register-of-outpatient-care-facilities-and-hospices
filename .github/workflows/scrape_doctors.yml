@@ -1,41 +1,69 @@
-name: Run Doctor Scraper V6
+name: Run Doctor Scraper V6 (Infinite Loop Edition)
 
-# Това позволява да го пускаш ръчно с бутонче (Manual Trigger)
 on:
   workflow_dispatch:
+  # Това позволява на скрипта да trigger-не сам себе си:
+  repository_dispatch:
+    types: [continue-scraping]
+
+permissions:
+  contents: write
 
 jobs:
   scrape-job:
     runs-on: ubuntu-latest
-    timeout-minutes: 350 # Даваме му почти 6 часа (максимума на GitHub)
+    timeout-minutes: 360 # 6 hours hard limit
 
     steps:
-      # 1. Изтегля кода и файловете от репото
       - name: Checkout Repo
         uses: actions/checkout@v4
 
-      # 2. Инсталира Python
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      # 3. Инсталира библиотеките от requirements.txt
       - name: Install Dependencies
         run: |
-          pip install -r requirements.txt
+          pip install requests pandas openpyxl
 
-      # 4. Пуска скрипта (main.py)
       - name: Run the Heist
+        id: run_script
         run: |
-          python main.py
+          python script/main.py
 
-      # 5. Запазва резултата като Artifact (за да можеш да го свалиш)
-      # Използваме "if: always()", за да запази файла дори ако скриптът гръмне по средата!
-      - name: Upload Loot
+      - name: Check for Continuation Flag
+        id: check_flag
+        run: |
+          if [ -f "CONTINUE_FLAG" ]; then
+            echo "continue=true" >> $GITHUB_OUTPUT
+            echo "Time limit hit. Scheduling next run..."
+            rm CONTINUE_FLAG
+          else
+            echo "continue=false" >> $GITHUB_OUTPUT
+            echo "Job finished naturally."
+          fi
+
+      - name: Commit Progress Log
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action Bot"
+          # Само ако има промяна в processed_ids.txt
+          git add script/processed_ids.txt
+          git commit -m "Update processed IDs progress [skip ci]" || echo "No changes to commit"
+          git push
+
+      - name: Upload Batch Artifact
         if: always() 
         uses: actions/upload-artifact@v4
         with:
-          name: FLATTENED_DATA_V6
-          path: FINAL_DOCTORS_V6_DOTLESS.xlsx
-          retention-days: 5
+          name: DOCTORS_BATCH_${{ github.run_id }}_${{ github.run_attempt }}
+          path: script/FINAL_DOCTORS_BATCH_*.xlsx
+          retention-days: 14
+
+      - name: Trigger Next Run
+        if: steps.check_flag.outputs.continue == 'true'
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          event-type: continue-scraping
