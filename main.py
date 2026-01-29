@@ -31,30 +31,135 @@ headers = {
     'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0'
 }
 
-# --- THE CHAINSAW CLEANER V6 (Dotless Edition) ---
+# --- THE SINGULARITY CLEANER V16 (INTEGRATED & ENRICHED) ---
 def clean_bg_address(raw_addr):
-    if not raw_addr or not isinstance(raw_addr, str):
+    if not isinstance(raw_addr, str) or not raw_addr:
         return ""
     
-    # Brainrot sanitization protocols active
-    clean = raw_addr.replace('№', ' ').replace('"', '').replace('„', '').replace('“', '').replace("'", "").replace("`", "")
-    clean = re.sub(r'\(.*?\)', '', clean)
-    clean = re.sub(r'/.*?/', '', clean)
+    # 0. INSTANT KILL (Metadata brainrot)
+    # Ако адресът съдържа тези думи и е твърде къс, значи е просто статус, а не локация.
+    brainrot_indicators = ["ЗАЛИЧЕН", "ЗАКРИТ", "НЕ СЪЩЕСТВУВА", "НЯМА ДАННИ", "ПРИЗЕМЕН", "СУТЕРЕН", "ПОЛИКЛИНИКА", "ЗДРАВНА СЛУЖБА", "СЗС"]
+    # Ако целият стринг е само "Здравна служба" или подобно, нямаме адрес.
+    if len(raw_addr) < 25 and any(x in raw_addr.upper() for x in brainrot_indicators):
+        return "INVALID_ADDRESS_METADATA"
 
-    clean = re.sub(r'Обл\.\s*[^,]+,?','', clean, flags=re.IGNORECASE)
-    clean = re.sub(r'област\s*[^,]+,?','', clean, flags=re.IGNORECASE)
-    clean = re.sub(r'общ\.\s*[^,]+,?','', clean, flags=re.IGNORECASE)
-    clean = re.sub(r'община\s*[^,]+,?','', clean, flags=re.IGNORECASE)
-
-    cutoff_pattern = r'[,\s]+(ет\.|етаж|ап\.|апартамент|каб\.|кабинет|стая|офис|помещение|маг\.|магазин|обект|партер|сутерен|поликлиника|здравна служба|болница).*$'
-    clean = re.sub(cutoff_pattern, '', clean, flags=re.IGNORECASE)
-    clean = re.sub(r'УПИ\s*[0-9XIV-]+', '', clean, flags=re.IGNORECASE)
+    # 1. STANDARDIZE SYMBOLS (Sigma Cleanup)
+    # Махаме №, думи като "номер", кавички и всякакви странни скоби
+    clean = raw_addr.replace('№', ' ').replace(' N ', ' ').replace(' No ', ' ').replace('номер', ' ')
+    clean = clean.replace('"', '').replace('„', '').replace('“', '').replace("'", "").replace("`", "")
     
-    clean = re.sub(r'\s+,', ',', clean)
-    clean = re.sub(r',+', ',', clean)
+    # Оправяне на римски цифри и интервали (напр. "VI - ТИ" -> "6", "ет. 2" -> "ет.2")
     clean = re.sub(r'\s+', ' ', clean)
     
-    return clean.strip(', .')
+    # 2. REMOVE ADMINISTRATIVE PREFIXES (Admin junk)
+    # Махаме "Обл.", "община" - те само бъркат Google Maps.
+    clean = re.sub(r'Обл\.\s*[^,;]+[,;]?', '', clean, flags=re.IGNORECASE)
+    clean = re.sub(r'област\s*[^,;]+[,;]?', '', clean, flags=re.IGNORECASE)
+    clean = re.sub(r'Общ\.\s*[^,;]+[,;]?', '', clean, flags=re.IGNORECASE)
+    clean = re.sub(r'община\s*[^,;]+[,;]?', '', clean, flags=re.IGNORECASE)
+    
+    # Remove leading numbering (e.g. "1. София...")
+    clean = re.sub(r'^\s*\d+[\.,]\s*', '', clean)
+
+    # 3. THE KILL LIST V16 (Updated with industrial, short-form horrors, and enrichments)
+    # Това е списъкът на Страшния съд. Срещне ли дума от тук след разделител - реже всичко след нея.
+    stop_words = [
+        # --- СГРАДЕН ФОНД & ЛОКАЦИЯ ---
+        r'ет\.', r'етаж', r'ет\s', r'е\.', r'ниво', r'Е-', # Е-1 style
+        r'ап\.', r'апартамент', r'ап\s', r'ап\d', r'ателие', r'ат\.', r'АП\.',
+        r'каб\.', r'кабинет', r'к-т', r'к\.\s*\d', r'к\d+', r'К-', # К-1 style
+        r'амб\.', r'амбулатория', r'амб\s',
+        r'стая', r'ст\.', r'ст\d',
+        r'офис', r'оф\.', 
+        r'помещение', r'зала', r'хале', r'салон', r'склад', 'мазе',
+        r'маг\.', r'магазин', r'обект', 
+        r'пав\.', r'павилион', r'барака', r'бунгало', 'фургон', 'контейнер', 'каравана',
+        r'партер', r'сутерен', r'приземен', r'кота', 'полуетаж', 'подблоково',
+        r'вх\.', r'вход', r'вх\s', r'В-', # В-А style
+        r'крило', r'сектор', r'тяло', r'корпус', r'база', r'Б:', # База: ...
+        r'блок\s+[А-Яа-я]', r'бл\.', r'бл\s', r'б\.', # Block variants
+        r'щанд', r'гараж', r'трафопост',
+        
+        # --- МЕДИЦИНСКИ ИНСТИТУЦИИ (Hell Level abbreviations) ---
+        r'ДКЦ', r'МБАЛ', r'УМБАЛ', r'СБАЛ', r'МЦ\s', r'МЦ-', r'МДЦ', r'АИПП', r'СМДЛ', 'МСЦ', 'ДМСГД',
+        r'Поликлиника', r'п-ка', r'Здравна служба', r'Здравен дом', r'Здравен участък', r'Здраве',
+        r'СЗС', r'СЗУ', r'ФЗП', r'ФСМП', r'ЦСМП', 'АПЗЗ', 'СБР', 'ДП', 'ОБ', 'РБ', 'ВМБ',
+        r'Болница', r'Диспансер', r'Лаборатория', 'Микробиология', 'Рентген', 'Хематология', 'Хистология',
+        r'Филиал', r'Ф\.', r'Ф:', # Филиал:
+        r'ЦПЗ', r'КОЦ', r'ФДМ', r'ДЦ', r'ТЕЛК', r'РЗИ', r'ХЕИ', r'ОСП', 'ТДКЦ', 'ОДПФЗС',
+        r'ВМА', 'МБАБ', 'СБАЛО', 'СБАЛАГ', 'ОДПФЗС', 'УПМБАЛ', 'СБДПЛР', 'ЦКВБ', 'ЦКВЗ',
+        r'Медицински център', r'Дентален център', r'Болнична', r'Спешна помощ',
+        r'манипулационна', r'манип\.', r'приемно', r'регистратура', r'център за', r'звено',
+        r'отделение', r'клиника', r'катедра', r'\bЗС\b', 
+        r'СХБАЛ', 'СБАЛББ', 'МДЛ', 'СМЛ', 'ЛЗУ', 'ДДМУИ', 'ПФДПО', 'ОДОЗС',
+        r'РСП', 'ДПО', 'МТЛ', 'ЦНИКА', 'СБХЛ', 'ОМЦ', 'САГБАЛ', 'УСБАЛЕ', 'ГПСМП', 'АМЦСМП', 'ГППМП', 'АИСМП', 'ИПСМП', 'КЦА',
+        r'ЛК', r'РК', # Лекарски кабинет, Рентгенов кабинет
+        
+        # --- ОБРАЗОВАНИЕ, АДМИНИСТРАЦИЯ И БИЗНЕС ---
+        r'кметство', r'община\s', r'съвет', r'читалище', r'поща', r'съдебна палата',
+        r'училище', r'ОУ\s', r'СУ\s', r'ЕГ\s', r'ПГ\s', r'СОУ\s', r'СПТУ', 'ПТУ', 'НУ\s', 'ДГ',
+        r'гимназия', 'колеж', 'университет', 'факултет', 'институт', 'академия', 'ПФК', 'НСА', 'БАН',
+        r'детска градина', r'ОДЗ', r'ясла', r'дом за', r'пансион', r'общежитие',
+        r'стадион', r'автогара', r'жп гара', r'гара', r'летище', 'терминал',
+        r'завод', 'цех', 'фабрика', 'предприятие', 'комбинат', 'миби', 'рудник',
+        r'АД\s', r'ЕООД', r'ООД', r'ЕАД', r'ЕТ\s', 'КД', 'СД', # Фирми
+        r'ООС', r'ДСК', 'МВР', 'БДЖ', 'ВиК', 'БТК', 'ТПК', 'ДЗИ', 'ДАП', 'АПК', 'ТКЗС', 'ПК',
+        r'Търговски център', r'ТЦ\s', r'Т\.Ц\.', r'Мол\s', r'Mall', r'Бизнес център', r'БЦ\s',
+        r'Ритейл', r'Аптека', r'Оптика', r'Дрогерия', r'супермаркет',
+        r'ТЕЦ', r'ВЕЦ', r'АЕЦ', r'Електроцентрала', r'ЗПЗ', r'СПЗ', r'НПЗ', r'ЮПЗ', r'ПЗ\s',
+        
+        # --- ТУРИЗЪМ ---
+        r'хотел', r'х-л', r'комплекс', r'резорт', r'resort', 'вила', 'вили',
+        r'ваканционно', r'къмпинг', r'хижа', r'санаториум', r'балнео', 'СПА', 'SPA',
+        r'к\.к\.', r'к\.к', r'курортен комплекс', 'ваканционен',
+        r'ж\.г\.', r'жилищна група', r'в\.з\.', r'вилна зона', 
+        r'местност', r'м-ст',
+        r'стопански двор', r'к-с',
+        
+        # --- CONNECTORS & BRAINROT ---
+        r'в сградата', r'сграда', r'бивш', r'бивша', r'бивше', 'бившо', 'старата',
+        r'срещу', r'до бл\.', r'до вх\.', r'зад ', r'на територията', 
+        r'продължение', r'разширение', r'до ', r'между', r'под ', r'на ъгъла', r'на гърба',
+        r'УПИ', r'ПИ\s', r'идентификатор', r'АОС', 'имот', 'кв\.', 'квартал \d', 'парцел', 'П-Л',
+        r'адрес 2', r'2-ри', r'3-ти', r'р-н',
+        r'Р\.П\.', r'УЧ-ЩЕ'
+    ]
+    
+    # Regex Magic: (разделител) + (стоп дума) + (всичко до края)
+    pattern_str = r'([,\s\(\.\/-]+)(' + '|'.join(stop_words) + r').*$'
+    
+    # 1. Clean using Stop Words
+    clean = re.sub(pattern_str, '', clean, flags=re.IGNORECASE)
+
+    # 2. Additional cleanup for things inside parentheses if they survived
+    clean = re.sub(r'\(.*?\)', '', clean)
+    clean = re.sub(r'/.*?/', '', clean)   
+    
+    # 3. Specific Brainrot Fixes
+    clean = re.sub(r'\bномер\b', '', clean, flags=re.IGNORECASE)
+    clean = re.sub(r'\bс\.\s*$', '', clean) # Ако завършва на "с." без име
+    clean = re.sub(r'\bул\.\s*$', '', clean) # Ако завършва на "ул." без име
+    
+    # 4. Final Polish
+    clean = re.sub(r'\s+', ' ', clean)      # Двойни интервали -> единичен
+    clean = re.sub(r'\s,', ',', clean)      # Интервал преди запетая
+    clean = re.sub(r',+', ',', clean)       # Двойни запетаи
+    
+    # Махаме точки, запетаи и тирета от края и началото
+    clean = clean.strip(' ,.-/\\')
+    
+    # 5. Sanity Check (Da ne se izlojim pred chujdencite)
+    # Ако сме изтрили всичко (напр. адресът е бил само "АПЗЗ"), връщаме оригиналния или грешка
+    if len(clean) < 3:
+        # Check if original had city info
+        if "гр." in raw_addr or "с." in raw_addr:
+             # Try to extract just the city/village name as a last resort
+             city_match = re.search(r'(гр\.|с\.)\s*([А-Яа-я\s\-]+)', raw_addr)
+             if city_match:
+                 return city_match.group(0)
+        return "INVALID_ADDRESS_TOO_SHORT"
+
+    return clean
 
 def get_processed_ids():
     """Reads the list of ID-chovtsi we already destroyed."""
@@ -169,6 +274,7 @@ def parse_data(records, all_hospitals, all_addresses, all_doctors):
         if addrs and isinstance(addrs, list):
             for ad in addrs:
                 raw_full_addr = ad.get('fulladdress', '')
+                # Apply the V16 Singularity Cleaner here!
                 clean_addr = clean_bg_address(raw_full_addr)
                 
                 addr_specs = ad.get('specialities', [])
