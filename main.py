@@ -131,29 +131,38 @@ def parse_data(records, all_hospitals, all_addresses, all_doctors):
         h_id = rec.get('number')
         if not h_id: continue
 
-        # --- 1. HOSPITALS ---
+        # --- 1. HOSPITALS (MODIFIED LOGIC: One row per manager) ---
+        # Mamka mu choveche, here we split the managers into multiple rows
         owners_list = rec.get('owners', [])
-        managers_str = ""
+        
+        # Prepare the base data that repeats for every manager row
+        base_hospital_data = {
+            'Hospital_ID': h_id,
+            'Old_Number': rec.get('oldNumber'),
+            'Name': rec.get('name'),
+            # Manager comes later
+            'Status': rec.get('statuslabel'),
+            'Reg_Date': rec.get('registrationDate'),
+            'Vid_LZ': rec.get('vid', {}).get('label') if isinstance(rec.get('vid'), dict) else rec.get('vid')
+        }
+
         if owners_list and isinstance(owners_list, list):
-            mgr_names = []
+            # If we have multiple boss-chovtsi, we make multiple rows
             for o in owners_list:
                 fn = o.get('firstname', '')
                 mn = o.get('middlename', '')
                 ln = o.get('lastname', '')
                 full_n = f"{fn} {mn} {ln}".strip()
-                if full_n: mgr_names.append(full_n)
-            managers_str = "; ".join(mgr_names)
-
-        hospital_entry = {
-            'Hospital_ID': h_id,
-            'Old_Number': rec.get('oldNumber'),
-            'Name': rec.get('name'),
-            'Managers': managers_str,
-            'Status': rec.get('statuslabel'),
-            'Reg_Date': rec.get('registrationDate'),
-            'Vid_LZ': rec.get('vid', {}).get('label') if isinstance(rec.get('vid'), dict) else rec.get('vid')
-        }
-        all_hospitals.append(hospital_entry)
+                
+                # Clone the dict so we don't mess up references (no Ohio bugs allowed)
+                entry = base_hospital_data.copy()
+                entry['Managers'] = full_n
+                all_hospitals.append(entry)
+        else:
+            # No managers? Still add the hospital but with empty manager field
+            entry = base_hospital_data.copy()
+            entry['Managers'] = "N/A"
+            all_hospitals.append(entry)
 
         # --- 2. ADDRESSES ---
         addrs = rec.get('address', [])
