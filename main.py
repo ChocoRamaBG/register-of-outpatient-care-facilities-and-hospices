@@ -10,7 +10,7 @@ from datetime import datetime
 
 # --- CONFIGURATION ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-INPUT_FILENAME = "BG_Medical_Registry_FULL.xlsx" 
+INPUT_FILENAME = "BG_Medical_Registry_Remaining.xlsx" 
 INPUT_FILE_PATH = os.path.join(SCRIPT_DIR, INPUT_FILENAME)
 PROCESSED_LOG_FILE = os.path.join(SCRIPT_DIR, "processed_ids.txt") # Тук ще пазим ID-тата на готовите пациентчовци
 CONTINUE_FLAG_FILE = "CONTINUE_FLAG" # Флагче за рестарт
