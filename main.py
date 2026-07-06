@@ -285,6 +285,10 @@ def save_multisheet_excel(hospitals, addresses, doctors):
 
 # --- MAIN EXECUTION ---
 def main_loop():
+    # Remove any old continue flags to ensure a clean slate
+    if os.path.exists(CONTINUE_FLAG_FILE):
+        os.remove(CONTINUE_FLAG_FILE)
+
     all_ids = fetch_base_registry_ids()
     
     processed_ids = get_processed_ids()
@@ -309,7 +313,13 @@ def main_loop():
             print("\n[WARN] Execution time limit reached. Initiating graceful shutdown sequence.")
             with open(CONTINUE_FLAG_FILE, 'w') as f:
                 f.write("CONTINUE_REQUIRED")
-            break 
+            
+            # Save the Excel data generated during this 5h 40m session before exiting
+            if all_hospitals:
+                save_multisheet_excel(all_hospitals, all_addresses, all_doctors)
+            
+            # Clean exit to allow GitHub Actions to commit state and spawn the next runner
+            sys.exit(0) 
 
         percent_done = ((i + 1) / total_pending) * 100
         print(f"[{i+1}/{total_pending}] >> {percent_done:.2f}% << Processing ID: {id_number}...")
