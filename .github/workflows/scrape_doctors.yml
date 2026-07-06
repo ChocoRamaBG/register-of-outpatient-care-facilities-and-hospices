@@ -1,82 +1,71 @@
-name: Run Doctor Scraper V6 (Infinite Loop Edition)
+name: Autonomous Medical Registry Scraper
 
 on:
   workflow_dispatch:
-  # Това позволява на скрипта да trigger-не сам себе си:
-  repository_dispatch:
-    types: [continue-scraping]
 
+# CRITICAL: Permissions required to commit tracking files and trigger workflows
 permissions:
   contents: write
+  actions: write
 
 jobs:
-  scrape-job:
+  run-pipeline:
     runs-on: ubuntu-latest
-    timeout-minutes: 350 # 6 hours hard limit (GitHub rules)
-
+    
     steps:
-      - name: Checkout Repo
+      - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          # Трябва да изтеглим кода с твоя токен (MY_PAT), за да работи лупа
-          token: ${{ secrets.MY_PAT }}
+          fetch-depth: 0
 
-      - name: Set up Python
+      - name: Set up Python Environment
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
       - name: Install Dependencies
         run: |
+          python -m pip install --upgrade pip
           pip install requests pandas openpyxl
 
-      - name: Run the Heist
-        id: run_script
-        run: |
-          # ВЕЧЕ Е БЕЗ 'script/' ОТПРЕД, ЩОТО ФАЙЛЪТ ТИ Е В ROOT
-          python main.py
+      - name: Extract City Nomenclatures
+        run: python city_code_names.py
 
-      - name: Check for Continuation Flag
-        id: check_flag
-        run: |
-          # Проверяваме за флаг файла в root директорията
-          if [ -f "CONTINUE_FLAG" ]; then
-            echo "continue=true" >> $GITHUB_OUTPUT
-            echo "Time limit hit. Scheduling next run..."
-            rm CONTINUE_FLAG
-          else
-            echo "continue=false" >> $GITHUB_OUTPUT
-            echo "Job finished naturally."
-          fi
+      - name: Execute Autonomous Deep Scrape
+        run: python main.py
 
-      - name: Commit Progress Log
-        if: steps.check_flag.outputs.continue == 'true' || always()
-        run: |
-          git config --global user.email "action@github.com"
-          git config --global user.name "GitHub Action Bot"
-          
-          # ТУК СЪЩО МАХНАХМЕ 'script/' ПРЕД processed_ids.txt
-          if [[ -n $(git status -s processed_ids.txt) ]]; then
-            git add processed_ids.txt
-            git commit -m "Update processed IDs progress [skip ci]"
-            git push
-          else
-            echo "No progress to save yet."
-          fi
-
-      - name: Upload Batch Artifact
-        if: always() 
+      - name: Archive and Upload Extracted Data
         uses: actions/upload-artifact@v4
         with:
-          name: DOCTORS_BATCH_${{ github.run_id }}_${{ github.run_attempt }}
-          # И ТУК МАХНАХМЕ 'script/'
-          path: FINAL_DOCTORS_BATCH_*.xlsx
-          retention-days: 14
+          # Adding run_id ensures each batch is saved uniquely and not overwritten
+          name: Final-Medical-Data-Output-Batch-${{ github.run_id }}
+          path: |
+            *.xlsx
+            processed_ids.txt
+          if-no-files-found: warn
 
-      - name: Trigger Next Run
-        if: steps.check_flag.outputs.continue == 'true'
-        uses: peter-evans/repository-dispatch@v3
-        with:
-          # ТОВА Е ВАЖНОТО - ПОЛЗВА ТВОЯ PAT ТОКЕН
-          token: ${{ secrets.MY_PAT }}
-          event-type: continue-scraping
+      - name: Commit Progress Tracker
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add processed_ids.txt
+          
+          # We only commit the .txt file so the next runner knows what is done.
+          # We DO NOT commit the .xlsx files here to prevent repository size bloat.
+          if git diff --staged --quiet; then
+            echo "No new IDs to commit."
+          else
+            git commit -m "Auto-save state: Update processed_ids.txt"
+            git push
+          fi
+
+      - name: Check Continue Flag and Trigger Next Run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -f "CONTINUE_FLAG" ]; then
+            echo "Continue flag detected. Script hit time limit. Triggering next workflow run..."
+            gh workflow run "Autonomous Medical Registry Scraper"
+          else
+            echo "No continue flag detected. Scraping is 100% complete."
+          fi
