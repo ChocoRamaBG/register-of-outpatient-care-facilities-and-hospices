@@ -3,7 +3,6 @@
 *.xls
 
 # Log files and flags
-processed_ids.txt
 CONTINUE_FLAG
 
 # Python cache
