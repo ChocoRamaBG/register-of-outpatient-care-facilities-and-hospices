@@ -34,28 +34,18 @@ jobs:
       - name: Execute Autonomous Deep Scrape
         run: python main.py
 
-      - name: Archive and Upload Extracted Data
-        uses: actions/upload-artifact@v4
-        with:
-          # Adding run_id ensures each batch is saved uniquely and not overwritten
-          name: Final-Medical-Data-Output-Batch-${{ github.run_id }}
-          path: |
-            *.xlsx
-            processed_ids.txt
-          if-no-files-found: warn
-
-      - name: Commit Progress Tracker
+      - name: Commit Progress Tracker and Data
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add processed_ids.txt
           
-          # We only commit the .txt file so the next runner knows what is done.
-          # We DO NOT commit the .xlsx files here to prevent repository size bloat.
+          git add processed_ids.txt
+          git add FINAL_DOCTORS_DATA.xlsx
+          
           if git diff --staged --quiet; then
-            echo "No new IDs to commit."
+            echo "No new changes to commit."
           else
-            git commit -m "Auto-save state: Update processed_ids.txt"
+            git commit -m "Auto-save state: Update processed_ids.txt and extracted medical data"
             git push
           fi
 
