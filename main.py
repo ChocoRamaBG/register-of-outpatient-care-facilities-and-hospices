@@ -4,19 +4,13 @@ import os
 import time
 import random
 import sys
-import shutil
 import re
-from datetime import datetime
 
 # --- CONFIGURATION ---
 try:
     SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 except NameError:
     SCRIPT_DIR = os.getcwd()
-
-# Input file name (must be in the same directory as the script)
-INPUT_FILENAME = "BG_Medical_Registry_FULL.xlsx"
-INPUT_FILE_PATH = os.path.join(SCRIPT_DIR, INPUT_FILENAME)
 
 # Log file for processed IDs (enables pausing and resuming the script)
 PROCESSED_LOG_FILE = os.path.join(SCRIPT_DIR, "processed_ids.txt")
@@ -42,37 +36,27 @@ def clean_bg_address(raw_addr):
     if not isinstance(raw_addr, str) or not raw_addr:
         return ""
     
-    # 0. Filter invalid records (Metadata indicators)
     invalid_indicators = ["ЗАЛИЧЕН", "ЗАКРИТ", "НЕ СЪЩЕСТВУВА", "НЯМА ДАННИ", "ПРИЗЕМЕН", "СУТЕРЕН", "ПОЛИКЛИНИКА", "ЗДРАВНА СЛУЖБА", "СЗС", "СЗУ", "ФЗП", "АПЗЗ"]
     if len(raw_addr) < 20 and any(x in raw_addr.upper() for x in invalid_indicators):
         return ""
 
-    # 1. Standardize symbols (Remove quotation marks and clean formatting)
     clean = raw_addr
     quotes = ['"', "'", '„', '“', '”', '’', '`']
     for q in quotes:
         clean = clean.replace(q, '')
         
     clean = clean.replace('№', ' ').replace(' N ', ' ').replace(' No ', ' ').replace('номер', ' ')
-    
-    # Correct Roman numerals and excessive spacing
     clean = re.sub(r'\s+', ' ', clean)
     
-    # 2. Remove administrative prefixes
     clean = re.sub(r'Обл\.\s*[^,;]+[,;]?', '', clean, flags=re.IGNORECASE)
     clean = re.sub(r'област\s*[^,;]+[,;]?', '', clean, flags=re.IGNORECASE)
     clean = re.sub(r'Общ\.\s*[^,;]+[,;]?', '', clean, flags=re.IGNORECASE)
     clean = re.sub(r'община\s*[^,;]+[,;]?', '', clean, flags=re.IGNORECASE)
     clean = re.sub(r'Район\s*[^,;]+[,;]?', '', clean, flags=re.IGNORECASE) 
     clean = re.sub(r'р-н\s*[^,;]+[,;]?', '', clean, flags=re.IGNORECASE)
-    
-    # Remove leading numbering (e.g., "1. София...")
     clean = re.sub(r'^\s*\d+[\.,]\s*', '', clean)
-    
-    # Remove Cadastral identifiers without truncating the string
     clean = re.sub(r'(УПИ|ПИ|идентификатор|парцел|кв\.|квартал)\s*[IVX0-9\-\.]+', '', clean, flags=re.IGNORECASE)
 
-    # 3. Structural cutoff words
     stop_words = [
         r'ет\.', r'етаж', r'ет\s', r'е\.', r'ниво', r'Е-', 
         r'ап\.', r'апартамент', r'ап\s', r'ап\d', r'ателие', r'ат\.', r'АП\.', r'А-',
@@ -126,6 +110,7 @@ def clean_bg_address(raw_addr):
 
     return clean
 
+# --- STATE MANAGEMENT ---
 def get_processed_ids():
     if not os.path.exists(PROCESSED_LOG_FILE):
         return set()
@@ -136,56 +121,61 @@ def save_processed_id(id_val):
     with open(PROCESSED_LOG_FILE, 'a', encoding='utf-8') as f:
         f.write(f"{id_val}\n")
 
-def load_ids_from_col_b():
-    print(f"Targeting input file: {INPUT_FILE_PATH}")
-    if not os.path.exists(INPUT_FILE_PATH):
-        print("Error: Input file not found in the specified directory.")
-        sys.exit(1)
+# --- 100% AUTONOMOUS ID FETCHING ---
+def fetch_base_registry_ids():
+    url = "https://registries.his.bg/api/V1/outpatientcare/getOutpatientCareWithFilterForApiV1"
+    start = 0
+    chunk_size = 3000
+    all_ids = []
+
+    print("[INFO] Initiating autonomous data extraction from API to find target IDs...")
     
-    temp_file = os.path.join(SCRIPT_DIR, "temp_processing_copy.xlsx")
-    try:
-        shutil.copy2(INPUT_FILE_PATH, temp_file)
-        df = pd.read_excel(temp_file, dtype=str)
-        
-        if df.shape[1] < 2:
-            print("Error: The file does not contain a second column (Column B).")
-            os.remove(temp_file)
-            sys.exit(1)
+    while True:
+        params = {
+            "searchVidOutpatientCare": "", "searchStatus": "", "searchCity": "",
+            "searchText": "", "searchMedicalStaff": "", "start": start, "length": chunk_size
+        }
+        try:
+            print(f"    -> Fetching base index chunk: {start} to {start + chunk_size}")
+            response = requests.get(url, headers=headers, params=params, timeout=30)
+            
+            if response.status_code != 200:
+                print(f"[CRITICAL] Base API returned status {response.status_code}. Aborting extraction.")
+                break
 
-        print(">>> Extracting IDs from Column B...")
-        raw_list = df.iloc[:, 1].tolist()
-        
-        clean_list = []
-        for x in raw_list:
-            try:
-                s_val = str(x).strip()
-                if s_val.lower() == 'nan' or s_val == "": continue
-                if s_val.endswith('.0'): s_val = s_val[:-2]
-                clean_list.append(s_val)
-            except: continue
-        
-        print(f"Loaded {len(clean_list)} total IDs.")
-        del df 
-        try: os.remove(temp_file)
-        except: pass
-        return clean_list
-    except Exception as e:
-        print(f"Failed to read file: {e}")
-        sys.exit(1)
+            data = response.json()
+            batch = data.get('registry', [])
+            
+            if not batch:
+                break
+                
+            for record in batch:
+                rec_number = record.get('number')
+                if rec_number:
+                    all_ids.append(str(rec_number).strip())
+            
+            if len(batch) < chunk_size:
+                break
+            
+            start += chunk_size
+            time.sleep(0.5)
 
+        except Exception as e:
+            print(f"[ERROR] Failed to fetch base registry: {e}")
+            break
+
+    print(f"[INFO] Successfully retrieved {len(all_ids)} total IDs directly from the web registry.")
+    return all_ids
+
+# --- API & DATA PARSING ---
 def fetch_details(id_number):
     url = f'https://registries.his.bg/api/V1/outpatientcare/getOutpatientCareByNumberForApiV1?number={id_number}'
     try:
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code == 200:
             return response.json()
-        elif response.status_code == 404:
-            return None
-        else:
-            print(f"    [!] Received HTTP {response.status_code} for ID {id_number}.")
-            return None
+        return None
     except Exception as e:
-        print(f"    [!] Network error encountered for ID {id_number}: {e}")
         return None
 
 def parse_data(records, all_hospitals, all_addresses, all_doctors):
@@ -292,8 +282,8 @@ def main_loop():
     if os.path.exists(CONTINUE_FLAG_FILE):
         os.remove(CONTINUE_FLAG_FILE)
 
-    # 1. Load targets
-    all_ids = load_ids_from_col_b()
+    # 1. Fetch targets completely autonomously
+    all_ids = fetch_base_registry_ids()
     
     # 2. Load previously processed IDs
     processed_ids = get_processed_ids()
@@ -334,14 +324,12 @@ def main_loop():
         if data:
             parse_data(data, all_hospitals, all_addresses, all_doctors)
             save_processed_id(id_number)
-            print(f"    [+] Data acquired successfully.")
             
             # Save optimization: Save periodically rather than on every single loop
             if (i + 1) % 50 == 0:
                 save_multisheet_excel(all_hospitals, all_addresses, all_doctors)
         else:
             save_processed_id(id_number)
-            print(f"    [-] Record skipped.")
         
         sleep_time = random.uniform(0.3, 0.8)
         time.sleep(sleep_time)
