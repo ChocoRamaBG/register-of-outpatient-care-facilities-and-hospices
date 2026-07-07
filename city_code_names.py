@@ -3,8 +3,12 @@ import pandas as pd
 import os
 import sys
 
-current_folder = os.path.dirname(os.path.abspath(__file__))
-output_file = os.path.join(current_folder, 'city_dump.xlsx')
+try:
+    output_dir = os.path.dirname(os.path.abspath(__file__))
+except NameError:
+    output_dir = os.getcwd()
+
+output_file = os.path.join(output_dir, 'city_dump.xlsx')
 
 headers = {
     'accept': '*/*',
