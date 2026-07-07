@@ -3,6 +3,7 @@
 *.xls
 !FINAL_DOCTORS_DATA.xlsx
 !city_dump.xlsx
+!BG_Medical_Registry_FULL.xlsx
 
 # Log files and flags
 CONTINUE_FLAG
