@@ -1,6 +1,8 @@
 # Excel files
 *.xlsx
 *.xls
+!FINAL_DOCTORS_DATA.xlsx
+!city_dump.xlsx
 
 # Log files and flags
 CONTINUE_FLAG
