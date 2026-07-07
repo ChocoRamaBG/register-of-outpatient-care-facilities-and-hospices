@@ -5,7 +5,6 @@ import time
 import random
 import sys
 import re
-from datetime import datetime
 
 # --- CONFIGURATION & PATH SETUP ---
 try:
@@ -19,8 +18,8 @@ CONTINUE_FLAG_FILE = os.path.join(output_dir, "CONTINUE_FLAG")
 MAX_RUNTIME_SECONDS = 20400 
 START_TIME = time.time()
 
-TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
-OUTPUT_FILE = os.path.join(output_dir, f'FINAL_DOCTORS_BATCH_{TIMESTAMP}.xlsx')
+# Hardcoded static name so Git can overwrite it on each run
+OUTPUT_FILE = os.path.join(output_dir, 'FINAL_DOCTORS_DATA.xlsx')
 
 headers = {
     'accept': '*/*',
@@ -314,11 +313,9 @@ def main_loop():
             with open(CONTINUE_FLAG_FILE, 'w') as f:
                 f.write("CONTINUE_REQUIRED")
             
-            # Save the Excel data generated during this 5h 40m session before exiting
             if all_hospitals:
                 save_multisheet_excel(all_hospitals, all_addresses, all_doctors)
             
-            # Clean exit to allow GitHub Actions to commit state and spawn the next runner
             sys.exit(0) 
 
         percent_done = ((i + 1) / total_pending) * 100
@@ -330,7 +327,6 @@ def main_loop():
             parse_data(data, all_hospitals, all_addresses, all_doctors)
             save_processed_id(id_number)
             
-            # Save progress periodically to avoid massive memory loss on random crashes
             if (i + 1) % 50 == 0:
                 save_multisheet_excel(all_hospitals, all_addresses, all_doctors)
         else:
