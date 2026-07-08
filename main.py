@@ -282,6 +282,27 @@ def main_loop():
     if os.path.exists(CONTINUE_FLAG_FILE):
         os.remove(CONTINUE_FLAG_FILE)
 
+    all_hospitals = []
+    all_addresses = []
+    all_doctors = []
+
+    # --- ПРОВЕРКА И ЗАРЕЖДАНЕ НА СЪЩЕСТВУВАЩ ФАЙЛ ---
+    if os.path.exists(OUTPUT_FILE):
+        print("[INFO] Съществуващ файл намерен. Зареждаме старите данни, за да не ги затриеме...")
+        try:
+            df_h = pd.read_excel(OUTPUT_FILE, sheet_name='Hospitals').fillna("")
+            all_hospitals = df_h.to_dict('records')
+
+            df_a = pd.read_excel(OUTPUT_FILE, sheet_name='Addresses').fillna("")
+            all_addresses = df_a.to_dict('records')
+
+            df_d = pd.read_excel(OUTPUT_FILE, sheet_name='Doctors').fillna("")
+            all_doctors = df_d.to_dict('records')
+            
+            print(f"[INFO] Успешно заредени {len(all_hospitals)} болници от предишната сесия.")
+        except Exception as e:
+            print(f"[WARN] Грешка при четене на стария файл. Стартираме на чисто: {e}")
+
     # 1. Fetch targets completely autonomously
     all_ids = fetch_base_registry_ids()
     
@@ -298,10 +319,6 @@ def main_loop():
         return
 
     print(f"--- STARTING PROCESSING BATCH (Remaining targets: {total_pending}) ---")
-    
-    all_hospitals = []
-    all_addresses = []
-    all_doctors = []
     
     for i, id_number in enumerate(pending_ids):
         # Enforce execution time limit to allow graceful workflow re-trigger
