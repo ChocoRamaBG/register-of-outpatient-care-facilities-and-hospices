@@ -22,7 +22,7 @@ PROCESSED_LOG_FILE = os.path.join(SCRIPT_DIR, "processed_blsbg_pages.txt")
 CONTINUE_FLAG_FILE = os.path.join(SCRIPT_DIR, "CONTINUE_FLAG_BLSBG")
 OUTPUT_FILE = os.path.join(SCRIPT_DIR, "bg_medics_dynamic_2029.xlsx")
 
-# Workflow limits
+# Workflow limits (Anti-timeout for GitHub Actions)
 MAX_RUNTIME_SECONDS = 20400  # 5 hours and 40 minutes limit
 START_TIME = time.time()
 
@@ -50,7 +50,7 @@ def save_to_excel(data, filepath):
         df = pd.DataFrame(data)
         df.to_excel(filepath, index=False)
     except Exception as e:
-        print(f"   [ERROR] Failed to save file to {filepath}. Exception: {e}")
+        print(f"  [ERROR] Не можах да запиша файла: {e}")
 
 # --- ELEMENT EXTRACTION ---
 def get_text_safe(element, xpath):
@@ -68,15 +68,17 @@ def get_attr_safe(element, attr):
         return "-"
 
 def main_loop():
+    print("Bootleg Chat: Минаваме на директна URL атака в GitHub Actions...")
+
     # Remove old flag if present
     if os.path.exists(CONTINUE_FLAG_FILE):
         os.remove(CONTINUE_FLAG_FILE)
 
     all_data = []
 
-    # --- LOAD EXISTING DATA ---
+    # --- LOAD EXISTING DATA (So we don't overwrite previous runs) ---
     if os.path.exists(OUTPUT_FILE):
-        print("[INFO] Existing output file found. Loading previous data to prevent overwrite...")
+        print("[INFO] Existing output file found. Loading previous data...")
         try:
             df_existing = pd.read_excel(OUTPUT_FILE).fillna("-")
             all_data = df_existing.to_dict('records')
@@ -90,24 +92,35 @@ def main_loop():
     # --- WEBDRIVER CONFIGURATION ---
     print("[INFO] Initializing web driver...")
     options = webdriver.ChromeOptions()
-    options.page_load_strategy = 'eager' # Don't wait for Archive.org's slow background scripts
+    options.page_load_strategy = 'eager'
+    
+    # CRITICAL FOR GITHUB ACTIONS:
     options.add_argument('--headless=new') 
+    options.add_argument('--no-sandbox') 
+    options.add_argument('--disable-dev-shm-usage') 
+    
+    # Anti-Sleep / Anti-Bot flags
     options.add_argument('--start-maximized') 
     options.add_argument('--window-size=1920,1080')
     options.add_argument('--disable-blink-features=AutomationControlled') 
-    options.add_argument('--no-sandbox') 
-    options.add_argument('--disable-dev-shm-usage') 
     options.add_argument('--ignore-certificate-errors')
-    options.add_argument('--disable-gpu') 
-    # Modern User-Agent spoofing
+    options.add_argument('--disable-backgrounding-occluded-windows')
+    options.add_argument('--disable-renderer-backgrounding')
+    options.add_argument('--disable-background-timer-throttling')
+    options.add_argument('--disable-popup-blocking') 
     options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36')
 
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
     # --- DATA COLLECTION PROCESS ---
-    for r in range(2, 29): 
+    # BLS BG usually has regions 01 to 28
+    for r in range(1, 29): 
         region_code = f"{r:02d}"
         page_num = 1 
+        
+        print(f"\n========================================")
+        print(f"🏥 ЗАПОЧВАМЕ РЕГИОН: {region_code}")
+        print(f"========================================")
         
         while True:
             page_id = f"{region_code}_{page_num}"
@@ -128,38 +141,35 @@ def main_loop():
                 driver.quit()
                 sys.exit(0)
 
-            # Note: Internet Archive URLs are used
-            target_url = f"https://web.archive.org/web/20201027092646/https://blsbg.eu/bg/medics/unionlist/{region_code}?UIN_page={page_num}"
-            print(f"  > Accessing region {region_code}, page {page_num}...")
+            target_url = f"https://blsbg.eu/bg/medics/unionlist/{region_code}?UIN_page={page_num}"
+            print(f"  > Отварям стр. {page_num} за регион {region_code}...")
             
             try:
                 driver.get(target_url)
-                # No static sleep needed here, WebDriverWait handles it better
             except Exception as e:
-                print(f"  [WARNING] Exception on initial load: {e}. Retrying...")
-                time.sleep(5)
+                print(f"  ! Грешка при зареждане на URL: {e}. Пробвам пак...")
+                time.sleep(2)
                 try:
                     driver.get(target_url)
                 except Exception as e:
-                    print(f"  [ERROR] Failed to load page twice. Skipping. Error: {e}")
+                    print(f"  ! Отказвам се от тая страница. Грешка: {e}")
                     break 
 
-            # Check for archive 404 or bad captures
-            if "404" in driver.title or "Page not found" in driver.page_source or "Wayback Machine has not archived" in driver.page_source:
-                print(f"  [INFO] Region {region_code} data collection concluded (or not archived).")
+            # Check for 404 or empty page
+            if "404" in driver.title or "Page not found" in driver.page_source:
+                print(f"  🏁 Регион {region_code} даде 404 или е празен. Минаваме на следващия.")
                 break
 
             try:
-                # Wait up to 45 seconds (Wayback Machine is notoriously slow)
-                rows = WebDriverWait(driver, 45).until(
+                rows = WebDriverWait(driver, 30).until(
                     EC.presence_of_all_elements_located((By.XPATH, "//table//tr[td]"))
                 )
             except TimeoutException:
                 if "Няма намерени" in driver.page_source:
-                    print(f"  [INFO] No records found for region {region_code}.")
+                    print(f"  🏁 Регион {region_code} е празен (няма записи).")
                     break
                 else:
-                    print("  [WARNING] Timeout detected. Dumping HTML and taking screenshot for debugging...")
+                    print("  ! Времето изтече. Dumping HTML/Screenshot за дебъг...")
                     
                     # --- DEBUGGING ARTIFACTS DUMP ---
                     screenshot_path = os.path.join(SCRIPT_DIR, f"error_region_{region_code}_page_{page_num}.png")
@@ -169,18 +179,14 @@ def main_loop():
                     with open(html_path, "w", encoding="utf-8") as f:
                         f.write(driver.page_source)
                     
-                    print(f"  [DEBUG] Saved screenshot to: {screenshot_path}")
-                    print(f"  [DEBUG] Saved page source to: {html_path}")
-
-                    # Attempt one refresh just in case it was a transient network hang
-                    print("  [INFO] Attempting page refresh...")
+                    print("  ! Пробваме рефреш...")
                     driver.refresh()
                     try:
-                        rows = WebDriverWait(driver, 45).until(
+                        rows = WebDriverWait(driver, 30).until(
                             EC.presence_of_all_elements_located((By.XPATH, "//table//tr[td]"))
                         )
                     except:
-                        print("  [ERROR] Refresh failed. Skipping current iteration.")
+                        print("  ! Пак греда. Скипваме страницата.")
                         break
 
             # --- PARSE PAGE DATA ---
@@ -195,11 +201,16 @@ def main_loop():
                 if match:
                     current_end = int(match.group(1))
                     total_records = int(match.group(2))
+                    
+                    percentage = (current_end / total_records) * 100
+                    print(f"    [Info] Прогрес: {percentage:.2f}% ({current_end}/{total_records})")
+                    
                     if current_end >= total_records:
                         is_last_page = True
             except NoSuchElementException:
-                pass
+                print("    [Warning] Няма summary div. Странно, но продължаваме.")
 
+            # Scraping rows
             for row in rows:
                 try:
                     uin = get_text_safe(row, "./td[1]")
@@ -239,7 +250,7 @@ def main_loop():
             save_to_excel(all_data, OUTPUT_FILE)
 
             if is_last_page:
-                print(f"  [INFO] Reached the final page for Region {region_code}.")
+                print(f"  🏁 Достигнахме края на Регион {region_code}.")
                 break 
             
             page_num += 1
@@ -247,7 +258,7 @@ def main_loop():
     # Final teardown
     save_to_excel(all_data, OUTPUT_FILE)
     driver.quit()
-    print(f"[SUCCESS] Scraping completed. Total records extracted: {len(all_data)}.")
+    print(f"Готово, Гащник! Всичко е в {OUTPUT_FILE}. Извадени записи: {len(all_data)}")
 
 if __name__ == "__main__":
     main_loop()
