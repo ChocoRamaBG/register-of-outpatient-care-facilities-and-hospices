@@ -1,0 +1,58 @@
+name: Autonomous BLS BG Archive Scraper
+
+on:
+  workflow_dispatch:
+
+# CRITICAL: Permissions required to commit tracking files and trigger workflows
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  run-blsbg-pipeline:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python Environment
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Execute Autonomous BLS BG Deep Scrape
+        run: python scraper_blsbg.py
+
+      - name: Commit Progress Tracker and Data
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          
+          git add processed_blsbg_pages.txt
+          git add bg_medics_dynamic_2029.xlsx
+          
+          if git diff --staged --quiet; then
+            echo "No new changes to commit."
+          else
+            git commit -m "Auto-save state: Update BLS BG processed pages and extracted medical data"
+            git push
+          fi
+
+      - name: Check Continue Flag and Trigger Next Run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -f "CONTINUE_FLAG_BLSBG" ]; then
+            echo "Continue flag detected. Script hit time limit. Triggering next workflow run..."
+            gh workflow run "Autonomous BLS BG Archive Scraper"
+          else
+            echo "No continue flag detected. BLS BG scraping is 100% complete."
+          fi
