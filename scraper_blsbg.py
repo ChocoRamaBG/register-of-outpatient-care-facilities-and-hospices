@@ -90,6 +90,7 @@ def main_loop():
     # --- WEBDRIVER CONFIGURATION ---
     print("[INFO] Initializing web driver...")
     options = webdriver.ChromeOptions()
+    options.page_load_strategy = 'eager' # Don't wait for Archive.org's slow background scripts
     options.add_argument('--headless=new') 
     options.add_argument('--start-maximized') 
     options.add_argument('--window-size=1920,1080')
@@ -98,7 +99,8 @@ def main_loop():
     options.add_argument('--disable-dev-shm-usage') 
     options.add_argument('--ignore-certificate-errors')
     options.add_argument('--disable-gpu') 
-    options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+    # Modern User-Agent spoofing
+    options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36')
 
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
@@ -126,28 +128,30 @@ def main_loop():
                 driver.quit()
                 sys.exit(0)
 
+            # Note: Internet Archive URLs are used
             target_url = f"https://web.archive.org/web/20201027092646/https://blsbg.eu/bg/medics/unionlist/{region_code}?UIN_page={page_num}"
             print(f"  > Accessing region {region_code}, page {page_num}...")
             
             try:
                 driver.get(target_url)
-                time.sleep(3) # GIVING THE ARCHIVE TIME TO LOAD
-            except Exception:
+                # No static sleep needed here, WebDriverWait handles it better
+            except Exception as e:
+                print(f"  [WARNING] Exception on initial load: {e}. Retrying...")
                 time.sleep(5)
                 try:
                     driver.get(target_url)
-                    time.sleep(3)
-                except:
-                    print("  [ERROR] Failed to load page. Skipping.")
+                except Exception as e:
+                    print(f"  [ERROR] Failed to load page twice. Skipping. Error: {e}")
                     break 
 
-            if "404" in driver.title or "Page not found" in driver.page_source:
-                print(f"  [INFO] Region {region_code} data collection concluded.")
+            # Check for archive 404 or bad captures
+            if "404" in driver.title or "Page not found" in driver.page_source or "Wayback Machine has not archived" in driver.page_source:
+                print(f"  [INFO] Region {region_code} data collection concluded (or not archived).")
                 break
 
             try:
-                # INCREASED TIMEOUT TO 40 SECONDS
-                rows = WebDriverWait(driver, 40).until(
+                # Wait up to 45 seconds (Wayback Machine is notoriously slow)
+                rows = WebDriverWait(driver, 45).until(
                     EC.presence_of_all_elements_located((By.XPATH, "//table//tr[td]"))
                 )
             except TimeoutException:
@@ -155,12 +159,24 @@ def main_loop():
                     print(f"  [INFO] No records found for region {region_code}.")
                     break
                 else:
-                    print("  [WARNING] Timeout detected. Attempting page refresh...")
+                    print("  [WARNING] Timeout detected. Dumping HTML and taking screenshot for debugging...")
+                    
+                    # --- DEBUGGING ARTIFACTS DUMP ---
+                    screenshot_path = os.path.join(SCRIPT_DIR, f"error_region_{region_code}_page_{page_num}.png")
+                    html_path = os.path.join(SCRIPT_DIR, f"error_region_{region_code}_page_{page_num}.html")
+                    
+                    driver.save_screenshot(screenshot_path)
+                    with open(html_path, "w", encoding="utf-8") as f:
+                        f.write(driver.page_source)
+                    
+                    print(f"  [DEBUG] Saved screenshot to: {screenshot_path}")
+                    print(f"  [DEBUG] Saved page source to: {html_path}")
+
+                    # Attempt one refresh just in case it was a transient network hang
+                    print("  [INFO] Attempting page refresh...")
                     driver.refresh()
-                    time.sleep(5) # WAIT AFTER REFRESH
                     try:
-                        # INCREASED TIMEOUT TO 40 SECONDS
-                        rows = WebDriverWait(driver, 40).until(
+                        rows = WebDriverWait(driver, 45).until(
                             EC.presence_of_all_elements_located((By.XPATH, "//table//tr[td]"))
                         )
                     except:
