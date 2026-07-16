@@ -17,22 +17,19 @@ try:
 except NameError:
     SCRIPT_DIR = os.getcwd()
 
-# State management files
 PROCESSED_LOG_FILE = os.path.join(SCRIPT_DIR, "processed_blsbg_pages.txt")
 CONTINUE_FLAG_FILE = os.path.join(SCRIPT_DIR, "CONTINUE_FLAG_BLSBG")
 OUTPUT_FILE = os.path.join(SCRIPT_DIR, "bg_medics_dynamic_2029.xlsx")
 
-# Workflow limits (Anti-timeout for GitHub Actions)
-MAX_RUNTIME_SECONDS = 20400  # 5 hours and 40 minutes limit
+MAX_RUNTIME_SECONDS = 20400  # Enforce limit for CI/CD environments
 START_TIME = time.time()
 
-# --- DATA CLEANING HELPER ---
+# --- UTILITIES ---
 def clean_text(text):
     if not isinstance(text, str):
         return text
     return re.sub(r'[\x00-\x1F\x7F]+', '', text).strip()
 
-# --- STATE MANAGEMENT ---
 def get_processed_pages():
     if not os.path.exists(PROCESSED_LOG_FILE):
         return set()
@@ -50,9 +47,8 @@ def save_to_excel(data, filepath):
         df = pd.DataFrame(data)
         df.to_excel(filepath, index=False)
     except Exception as e:
-        print(f"  [ERROR] Не можах да запиша файла: {e}")
+        print(f"  [ERROR] I/O Exception during file save: {e}")
 
-# --- ELEMENT EXTRACTION ---
 def get_text_safe(element, xpath):
     try:
         val = element.find_element(By.XPATH, xpath).text.strip()
@@ -67,39 +63,38 @@ def get_attr_safe(element, attr):
     except:
         return "-"
 
+# --- CORE PIPELINE ---
 def main_loop():
-    print("Bootleg Chat: Минаваме на директна URL атака в GitHub Actions...")
+    print("[INFO] Initializing data extraction pipeline with latency handling...")
 
-    # Remove old flag if present
     if os.path.exists(CONTINUE_FLAG_FILE):
         os.remove(CONTINUE_FLAG_FILE)
 
     all_data = []
 
-    # --- LOAD EXISTING DATA (So we don't overwrite previous runs) ---
+    # Resume capability: load existing dataset to prevent data loss
     if os.path.exists(OUTPUT_FILE):
-        print("[INFO] Existing output file found. Loading previous data...")
+        print("[INFO] Locating existing dataset...")
         try:
             df_existing = pd.read_excel(OUTPUT_FILE).fillna("-")
             all_data = df_existing.to_dict('records')
-            print(f"[INFO] Successfully loaded {len(all_data)} records from previous session.")
+            print(f"[INFO] Successfully loaded {len(all_data)} records from prior sessions.")
         except Exception as e:
-            print(f"[WARN] Error reading old file. Starting fresh. Exception: {e}")
+            print(f"[WARN] Failed to parse existing file. Starting with empty dataset. Error: {e}")
 
     processed_pages = get_processed_pages()
-    print(f"[INFO] Found {len(processed_pages)} previously processed pages.")
+    print(f"[INFO] Index loaded: {len(processed_pages)} pages previously processed.")
 
-    # --- WEBDRIVER CONFIGURATION ---
-    print("[INFO] Initializing web driver...")
+    print("[INFO] Configuring WebDriver instance...")
     options = webdriver.ChromeOptions()
     options.page_load_strategy = 'eager'
     
-    # CRITICAL FOR GITHUB ACTIONS:
+    # CI/CD specific headless flags
     options.add_argument('--headless=new') 
     options.add_argument('--no-sandbox') 
     options.add_argument('--disable-dev-shm-usage') 
     
-    # Anti-Sleep / Anti-Bot flags
+    # Anti-bot detection mitigation & performance flags
     options.add_argument('--start-maximized') 
     options.add_argument('--window-size=1920,1080')
     options.add_argument('--disable-blink-features=AutomationControlled') 
@@ -112,28 +107,26 @@ def main_loop():
 
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
-    # --- DATA COLLECTION PROCESS ---
-    # BLS BG usually has regions 01 to 28
     for r in range(1, 29): 
         region_code = f"{r:02d}"
         page_num = 1 
+        last_first_row_data = None  # Loop protection memory
         
         print(f"\n========================================")
-        print(f"🏥 ЗАПОЧВАМЕ РЕГИОН: {region_code}")
+        print(f" PROCESSING REGION: {region_code}")
         print(f"========================================")
         
         while True:
             page_id = f"{region_code}_{page_num}"
             
-            # Skip if already processed in a previous workflow run
             if page_id in processed_pages:
                 page_num += 1
                 continue
 
-            # Enforce execution time limit to allow graceful workflow re-trigger
+            # Graceful shutdown handler for CI/CD environments
             elapsed = time.time() - START_TIME
             if elapsed > MAX_RUNTIME_SECONDS:
-                print("\n[WARN] Execution time limit reached. Initiating graceful shutdown sequence.")
+                print("\n[WARN] Execution runtime limit approaching. Initiating graceful shutdown...")
                 with open(CONTINUE_FLAG_FILE, 'w') as f:
                     f.write("CONTINUE_REQUIRED")
                 
@@ -142,22 +135,23 @@ def main_loop():
                 sys.exit(0)
 
             target_url = f"https://blsbg.eu/bg/medics/unionlist/{region_code}?UIN_page={page_num}"
-            print(f"  > Отварям стр. {page_num} за регион {region_code}...")
+            print(f"  > Fetching Region {region_code} | Page {page_num}...")
             
             try:
                 driver.get(target_url)
+                time.sleep(3) # Throttle to accommodate server latency
             except Exception as e:
-                print(f"  ! Грешка при зареждане на URL: {e}. Пробвам пак...")
-                time.sleep(2)
+                print(f"  [WARN] Request timeout. Retrying connection...")
+                time.sleep(5)
                 try:
                     driver.get(target_url)
+                    time.sleep(3)
                 except Exception as e:
-                    print(f"  ! Отказвам се от тая страница. Грешка: {e}")
+                    print(f"  [ERROR] Connection failed after retry. Skipping node. Exception: {e}")
                     break 
 
-            # Check for 404 or empty page
             if "404" in driver.title or "Page not found" in driver.page_source:
-                print(f"  🏁 Регион {region_code} даде 404 или е празен. Минаваме на следващия.")
+                print(f"  [INFO] Region {region_code} returned 404 Not Found.")
                 break
 
             try:
@@ -166,35 +160,38 @@ def main_loop():
                 )
             except TimeoutException:
                 if "Няма намерени" in driver.page_source:
-                    print(f"  🏁 Регион {region_code} е празен (няма записи).")
+                    print(f"  [INFO] No further records available for Region {region_code}.")
                     break
                 else:
-                    print("  ! Времето изтече. Dumping HTML/Screenshot за дебъг...")
-                    
-                    # --- DEBUGGING ARTIFACTS DUMP ---
-                    screenshot_path = os.path.join(SCRIPT_DIR, f"error_region_{region_code}_page_{page_num}.png")
-                    html_path = os.path.join(SCRIPT_DIR, f"error_region_{region_code}_page_{page_num}.html")
-                    
-                    driver.save_screenshot(screenshot_path)
-                    with open(html_path, "w", encoding="utf-8") as f:
-                        f.write(driver.page_source)
-                    
-                    print("  ! Пробваме рефреш...")
+                    print("  [WARN] DOM Timeout. Forcing page refresh...")
                     driver.refresh()
+                    time.sleep(3)
                     try:
                         rows = WebDriverWait(driver, 30).until(
                             EC.presence_of_all_elements_located((By.XPATH, "//table//tr[td]"))
                         )
                     except:
-                        print("  ! Пак греда. Скипваме страницата.")
+                        print("  [ERROR] Element location failed post-refresh. Skipping.")
                         break
+            
+            # --- Pagination Loop Protection ---
+            if not rows:
+                break
+            
+            current_first_row_data = get_text_safe(rows[0], "./td[1]")
+            if current_first_row_data == last_first_row_data and current_first_row_data != "-":
+                print(f"  [WARN] Pagination index duplication detected on page {page_num}. Terminating region collection.")
+                break
+            last_first_row_data = current_first_row_data
 
-            # --- PARSE PAGE DATA ---
+            # --- DOM Parsing: Summary Element ---
             summary_text = "-"
             is_last_page = False
             
             try:
-                summary_element = driver.find_element(By.CSS_SELECTOR, "div.summary")
+                summary_element = WebDriverWait(driver, 5).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "div.summary"))
+                )
                 summary_text = clean_text(summary_element.text)
                 
                 match = re.search(r'-(\d+)\s+от\s+(\d+)', summary_text)
@@ -203,17 +200,20 @@ def main_loop():
                     total_records = int(match.group(2))
                     
                     percentage = (current_end / total_records) * 100
-                    print(f"    [Info] Прогрес: {percentage:.2f}% ({current_end}/{total_records})")
+                    print(f"    [INFO] Progress: {percentage:.2f}% ({current_end}/{total_records})")
                     
                     if current_end >= total_records:
                         is_last_page = True
-            except NoSuchElementException:
-                print("    [Warning] Няма summary div. Странно, но продължаваме.")
+            except TimeoutException:
+                print("    [WARN] Summary element missing. Relying on duplication protection protocol.")
 
-            # Scraping rows
+            # --- DOM Parsing: Data Table ---
+            valid_records_this_page = 0
+
             for row in rows:
                 try:
                     uin = get_text_safe(row, "./td[1]")
+                    if uin == "-": continue 
                     
                     try:
                         img = row.find_element(By.CSS_SELECTOR, "img.expand")
@@ -242,23 +242,29 @@ def main_loop():
                         "Summary Info": summary_text
                     }
                     all_data.append(data_row)
+                    valid_records_this_page += 1
                 except Exception:
                     continue
             
-            # Log the page as successfully processed and save the state
+            # Save state
             save_processed_page(region_code, page_num)
             save_to_excel(all_data, OUTPUT_FILE)
 
+            # --- Exit Conditions ---
+            if valid_records_this_page == 0:
+                print(f"  [INFO] No valid records extracted. Concluding region.")
+                break
+
             if is_last_page:
-                print(f"  🏁 Достигнахме края на Регион {region_code}.")
+                print(f"  [SUCCESS] End of dataset reached for Region {region_code}.")
                 break 
             
             page_num += 1
 
-    # Final teardown
+    # Teardown
     save_to_excel(all_data, OUTPUT_FILE)
     driver.quit()
-    print(f"Готово, Гащник! Всичко е в {OUTPUT_FILE}. Извадени записи: {len(all_data)}")
+    print(f"\n[SUCCESS] Pipeline execution complete. Extracted {len(all_data)} records to {OUTPUT_FILE}.")
 
 if __name__ == "__main__":
     main_loop()
