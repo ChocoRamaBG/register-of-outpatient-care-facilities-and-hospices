@@ -31,7 +31,20 @@ jobs:
       - name: Execute Autonomous BLS BG Deep Scrape
         run: python scraper_blsbg.py
 
+      # --- NEW DEBUG ARTIFACT UPLOAD STEP ---
+      - name: Upload Debug Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scraper-debug-files
+          path: |
+            *.png
+            *.html
+          retention-days: 3
+      # --------------------------------------
+
       - name: Commit Progress Tracker and Data
+        if: always()
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
@@ -53,6 +66,7 @@ jobs:
           fi
 
       - name: Check Continue Flag and Trigger Next Run
+        if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
