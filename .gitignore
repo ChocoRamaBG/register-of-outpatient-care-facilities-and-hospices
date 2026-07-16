@@ -3,10 +3,11 @@
 *.xls
 !FINAL_DOCTORS_DATA.xlsx
 !city_dump.xlsx
-!BG_Medical_Registry_FULL.xlsx
+!bg_medics_dynamic_2029.xlsx
 
 # Log files and flags
 CONTINUE_FLAG
+CONTINUE_FLAG_BLSBG
 
 # Python cache
 __pycache__/
