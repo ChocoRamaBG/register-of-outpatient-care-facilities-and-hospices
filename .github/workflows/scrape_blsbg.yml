@@ -36,8 +36,14 @@ jobs:
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           
+          # Force the text file to exist so git add doesn't crash
+          touch processed_blsbg_pages.txt
           git add processed_blsbg_pages.txt
-          git add bg_medics_dynamic_2029.xlsx
+          
+          # Only add the Excel file if it actually exists
+          if [ -f "bg_medics_dynamic_2029.xlsx" ]; then
+            git add bg_medics_dynamic_2029.xlsx
+          fi
           
           if git diff --staged --quiet; then
             echo "No new changes to commit."
