@@ -131,10 +131,12 @@ def main_loop():
             
             try:
                 driver.get(target_url)
+                time.sleep(3) # GIVING THE ARCHIVE TIME TO LOAD
             except Exception:
-                time.sleep(2)
+                time.sleep(5)
                 try:
                     driver.get(target_url)
+                    time.sleep(3)
                 except:
                     print("  [ERROR] Failed to load page. Skipping.")
                     break 
@@ -144,7 +146,8 @@ def main_loop():
                 break
 
             try:
-                rows = WebDriverWait(driver, 10).until(
+                # INCREASED TIMEOUT TO 40 SECONDS
+                rows = WebDriverWait(driver, 40).until(
                     EC.presence_of_all_elements_located((By.XPATH, "//table//tr[td]"))
                 )
             except TimeoutException:
@@ -154,8 +157,10 @@ def main_loop():
                 else:
                     print("  [WARNING] Timeout detected. Attempting page refresh...")
                     driver.refresh()
+                    time.sleep(5) # WAIT AFTER REFRESH
                     try:
-                        rows = WebDriverWait(driver, 10).until(
+                        # INCREASED TIMEOUT TO 40 SECONDS
+                        rows = WebDriverWait(driver, 40).until(
                             EC.presence_of_all_elements_located((By.XPATH, "//table//tr[td]"))
                         )
                     except:
