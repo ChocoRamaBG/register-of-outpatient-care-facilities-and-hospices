@@ -68,7 +68,7 @@ jobs:
       - name: Check Continue Flag and Trigger Next Run
         if: always()
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           if [ -f "CONTINUE_FLAG_BLSBG" ]; then
             echo "Continue flag detected. Script hit time limit. Triggering next workflow run..."
