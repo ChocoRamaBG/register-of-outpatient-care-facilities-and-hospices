@@ -135,45 +135,51 @@ def main_loop():
                 sys.exit(0)
 
             target_url = f"https://blsbg.eu/bg/medics/unionlist/{region_code}?UIN_page={page_num}"
-            print(f"  > Fetching Region {region_code} | Page {page_num}...")
             
-            try:
-                driver.get(target_url)
-                time.sleep(3) # Throttle to accommodate server latency
-            except Exception as e:
-                print(f"  [WARN] Request timeout. Retrying connection...")
-                time.sleep(5)
+            rows = []
+            page_loaded = False
+            
+            while not page_loaded:
+                elapsed = time.time() - START_TIME
+                if elapsed > MAX_RUNTIME_SECONDS:
+                    print("\n[WARN] Runtime limit reached while waiting for server. Shutting down...")
+                    with open(CONTINUE_FLAG_FILE, 'w') as f:
+                        f.write("CONTINUE_REQUIRED")
+                    save_to_excel(all_data, OUTPUT_FILE)
+                    driver.quit()
+                    sys.exit(0)
+
+                print(f"  > Fetching Region {region_code} | Page {page_num}...")
+                
                 try:
                     driver.get(target_url)
                     time.sleep(3)
                 except Exception as e:
-                    print(f"  [ERROR] Connection failed after retry. Skipping node. Exception: {e}")
-                    break 
+                    print(f"  [WARN] Server is down/Connection Refused. Retrying in 15s... Error: {e}")
+                    time.sleep(15)
+                    continue
 
-            if "404" in driver.title or "Page not found" in driver.page_source:
-                print(f"  [INFO] Region {region_code} returned 404 Not Found.")
+                if "404" in driver.title or "Page not found" in driver.page_source:
+                    print(f"  [INFO] Region {region_code} returned 404 Not Found.")
+                    break
+
+                try:
+                    rows = WebDriverWait(driver, 30).until(
+                        EC.presence_of_all_elements_located((By.XPATH, "//table//tr[td]"))
+                    )
+                    page_loaded = True
+                except TimeoutException:
+                    if "Няма намерени" in driver.page_source:
+                        print(f"  [INFO] No further records available for Region {region_code}.")
+                        page_loaded = True
+                        rows = []
+                    else:
+                        print("  [WARN] DOM Timeout. Page is hanging. Refreshing in 10s...")
+                        time.sleep(10)
+            
+            if not page_loaded and not rows:
                 break
 
-            try:
-                rows = WebDriverWait(driver, 30).until(
-                    EC.presence_of_all_elements_located((By.XPATH, "//table//tr[td]"))
-                )
-            except TimeoutException:
-                if "Няма намерени" in driver.page_source:
-                    print(f"  [INFO] No further records available for Region {region_code}.")
-                    break
-                else:
-                    print("  [WARN] DOM Timeout. Forcing page refresh...")
-                    driver.refresh()
-                    time.sleep(3)
-                    try:
-                        rows = WebDriverWait(driver, 30).until(
-                            EC.presence_of_all_elements_located((By.XPATH, "//table//tr[td]"))
-                        )
-                    except:
-                        print("  [ERROR] Element location failed post-refresh. Skipping.")
-                        break
-            
             # --- Pagination Loop Protection ---
             if not rows:
                 break
