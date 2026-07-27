@@ -72,7 +72,6 @@ def main_loop():
 
     all_data = []
 
-    # Resume capability: load existing dataset to prevent data loss
     if os.path.exists(OUTPUT_FILE):
         print("[INFO] Locating existing dataset...")
         try:
@@ -89,12 +88,9 @@ def main_loop():
     options = webdriver.ChromeOptions()
     options.page_load_strategy = 'eager'
     
-    # CI/CD specific headless flags
     options.add_argument('--headless=new') 
     options.add_argument('--no-sandbox') 
     options.add_argument('--disable-dev-shm-usage') 
-    
-    # Anti-bot detection mitigation & performance flags
     options.add_argument('--start-maximized') 
     options.add_argument('--window-size=1920,1080')
     options.add_argument('--disable-blink-features=AutomationControlled') 
@@ -110,7 +106,7 @@ def main_loop():
     for r in range(1, 29): 
         region_code = f"{r:02d}"
         page_num = 1 
-        last_first_row_data = None  # Loop protection memory
+        last_first_row_data = None  
         
         print(f"\n========================================")
         print(f" PROCESSING REGION: {region_code}")
@@ -123,7 +119,6 @@ def main_loop():
                 page_num += 1
                 continue
 
-            # Graceful shutdown handler for CI/CD environments
             elapsed = time.time() - START_TIME
             if elapsed > MAX_RUNTIME_SECONDS:
                 print("\n[WARN] Execution runtime limit approaching. Initiating graceful shutdown...")
@@ -155,8 +150,8 @@ def main_loop():
                     driver.get(target_url)
                     time.sleep(3)
                 except Exception as e:
-                    print(f"  [WARN] Server is down/Connection Refused. Retrying in 15s... Error: {e}")
-                    time.sleep(15)
+                    print(f"  [WARN] Server is dead. Relaxing for 5 minutes before retry... Error: {e}")
+                    time.sleep(300) # Чакаме 5 минути
                     continue
 
                 if "404" in driver.title or "Page not found" in driver.page_source:
@@ -174,13 +169,12 @@ def main_loop():
                         page_loaded = True
                         rows = []
                     else:
-                        print("  [WARN] DOM Timeout. Page is hanging. Refreshing in 10s...")
-                        time.sleep(10)
+                        print("  [WARN] DOM Timeout. Page is hanging. Refreshing in 5 minutes...")
+                        time.sleep(300) # Чакаме 5 минути и тук
             
             if not page_loaded and not rows:
                 break
 
-            # --- Pagination Loop Protection ---
             if not rows:
                 break
             
@@ -190,7 +184,6 @@ def main_loop():
                 break
             last_first_row_data = current_first_row_data
 
-            # --- DOM Parsing: Summary Element ---
             summary_text = "-"
             is_last_page = False
             
@@ -213,7 +206,6 @@ def main_loop():
             except TimeoutException:
                 print("    [WARN] Summary element missing. Relying on duplication protection protocol.")
 
-            # --- DOM Parsing: Data Table ---
             valid_records_this_page = 0
 
             for row in rows:
@@ -252,11 +244,9 @@ def main_loop():
                 except Exception:
                     continue
             
-            # Save state
             save_processed_page(region_code, page_num)
             save_to_excel(all_data, OUTPUT_FILE)
 
-            # --- Exit Conditions ---
             if valid_records_this_page == 0:
                 print(f"  [INFO] No valid records extracted. Concluding region.")
                 break
@@ -267,7 +257,6 @@ def main_loop():
             
             page_num += 1
 
-    # Teardown
     save_to_excel(all_data, OUTPUT_FILE)
     driver.quit()
     print(f"\n[SUCCESS] Pipeline execution complete. Extracted {len(all_data)} records to {OUTPUT_FILE}.")
