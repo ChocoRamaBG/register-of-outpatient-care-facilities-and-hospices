@@ -3,7 +3,6 @@ name: Autonomous BLS BG Archive Scraper
 on:
   workflow_dispatch:
 
-# CRITICAL: Permissions required to commit tracking files and trigger workflows
 permissions:
   contents: write
   actions: write
@@ -31,7 +30,6 @@ jobs:
       - name: Execute Autonomous BLS BG Deep Scrape
         run: python scraper_blsbg.py
 
-      # --- NEW DEBUG ARTIFACT UPLOAD STEP ---
       - name: Upload Debug Artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -41,7 +39,6 @@ jobs:
             *.png
             *.html
           retention-days: 3
-      # --------------------------------------
 
       - name: Commit Progress Tracker and Data
         if: always()
@@ -49,11 +46,9 @@ jobs:
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           
-          # Force the text file to exist so git add doesn't crash
           touch processed_blsbg_pages.txt
           git add processed_blsbg_pages.txt
           
-          # Only add the Excel file if it actually exists
           if [ -f "bg_medics_dynamic_2029.xlsx" ]; then
             git add bg_medics_dynamic_2029.xlsx
           fi
@@ -70,6 +65,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "============================================================"
+            echo "ERROR: PAT_TOKEN IS MISSING, YOU TOTAL NOOB!"
+            echo "Go to Repo Settings -> Secrets and variables -> Actions"
+            echo "Add a new secret named PAT_TOKEN with your GitHub PAT."
+            echo "============================================================"
+            exit 1
+          fi
+
           if [ -f "CONTINUE_FLAG_BLSBG" ]; then
             echo "Continue flag detected. Script hit time limit. Triggering next workflow run..."
             gh workflow run "Autonomous BLS BG Archive Scraper"
