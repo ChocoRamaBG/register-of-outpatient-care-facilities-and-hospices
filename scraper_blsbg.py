@@ -169,8 +169,8 @@ def main_loop():
                         page_loaded = True
                         rows = []
                     else:
-                        print("  [WARN] DOM Timeout. Page is hanging. Refreshing in 5 minutes...")
-                        time.sleep(300) # Чакаме 5 минути и тук
+                        print("  [WARN] DOM Timeout. Page is hanging. Refreshing in 30 secs...")
+                        time.sleep(30) # Чакаме 30 секунди и тук
             
             if not page_loaded and not rows:
                 break
