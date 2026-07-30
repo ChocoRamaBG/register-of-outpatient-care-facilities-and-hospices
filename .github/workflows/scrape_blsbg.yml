@@ -2,6 +2,8 @@ name: Autonomous BLS BG Archive Scraper
 
 on:
   workflow_dispatch:
+  # schedule:
+  #   - cron: '0 2 * * *'
 
 permissions:
   contents: write
@@ -38,6 +40,7 @@ jobs:
           path: |
             *.png
             *.html
+            blsbg_outputs/*.txt
           retention-days: 3
 
       - name: Commit Progress Tracker and Data
@@ -46,11 +49,13 @@ jobs:
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           
-          touch processed_blsbg_pages.txt
-          git add processed_blsbg_pages.txt
+          # Създаваме файла, ако скриптът не е стигнал до запис, за да не гърми git add
+          mkdir -p blsbg_outputs
+          touch blsbg_outputs/processed_blsbg_pages.txt
+          git add blsbg_outputs/processed_blsbg_pages.txt
           
-          if [ -f "bg_medics_dynamic_2029.xlsx" ]; then
-            git add bg_medics_dynamic_2029.xlsx
+          if [ -f "blsbg_outputs/bg_medics_dynamic_2029.xlsx" ]; then
+            git add blsbg_outputs/bg_medics_dynamic_2029.xlsx
           fi
           
           if git diff --staged --quiet; then
@@ -74,7 +79,7 @@ jobs:
             exit 1
           fi
 
-          if [ -f "CONTINUE_FLAG_BLSBG" ]; then
+          if [ -f "blsbg_outputs/CONTINUE_FLAG_BLSBG" ]; then
             echo "Continue flag detected. Script hit time limit. Triggering next workflow run..."
             gh workflow run "Autonomous BLS BG Archive Scraper"
           else
