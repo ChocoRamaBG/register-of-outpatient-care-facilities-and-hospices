@@ -17,9 +17,13 @@ try:
 except NameError:
     SCRIPT_DIR = os.getcwd()
 
-PROCESSED_LOG_FILE = os.path.join(SCRIPT_DIR, "processed_blsbg_pages.txt")
-CONTINUE_FLAG_FILE = os.path.join(SCRIPT_DIR, "CONTINUE_FLAG_BLSBG")
-OUTPUT_FILE = os.path.join(SCRIPT_DIR, "bg_medics_dynamic_2029.xlsx")
+# Създаваме отделна директория за този конкретен парсер
+OUTPUT_DIR = os.path.join(SCRIPT_DIR, "blsbg_outputs")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+PROCESSED_LOG_FILE = os.path.join(OUTPUT_DIR, "processed_blsbg_pages.txt")
+CONTINUE_FLAG_FILE = os.path.join(OUTPUT_DIR, "CONTINUE_FLAG_BLSBG")
+OUTPUT_FILE = os.path.join(OUTPUT_DIR, "bg_medics_dynamic_2029.xlsx")
 
 MAX_RUNTIME_SECONDS = 20400  # Enforce limit for CI/CD environments
 START_TIME = time.time()
@@ -151,7 +155,7 @@ def main_loop():
                     time.sleep(3)
                 except Exception as e:
                     print(f"  [WARN] Server is dead. Relaxing for 5 minutes before retry... Error: {e}")
-                    time.sleep(300) # Чакаме 5 минути
+                    time.sleep(300)
                     continue
 
                 if "404" in driver.title or "Page not found" in driver.page_source:
@@ -170,7 +174,7 @@ def main_loop():
                         rows = []
                     else:
                         print("  [WARN] DOM Timeout. Page is hanging. Refreshing in 30 secs...")
-                        time.sleep(30) # Чакаме 30 секунди и тук
+                        time.sleep(30) 
             
             if not page_loaded and not rows:
                 break
