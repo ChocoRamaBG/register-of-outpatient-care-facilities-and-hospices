@@ -12,14 +12,17 @@ try:
 except NameError:
     SCRIPT_DIR = os.getcwd()
 
+OUTPUT_DIR = os.path.join(SCRIPT_DIR, "hisbg_outputs")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
 # Log file for processed IDs (enables pausing and resuming the script)
-PROCESSED_LOG_FILE = os.path.join(SCRIPT_DIR, "processed_ids.txt")
+PROCESSED_LOG_FILE = os.path.join(OUTPUT_DIR, "hisbg_processed_ids.txt")
 
 # Flag file to trigger GitHub Actions loop
-CONTINUE_FLAG_FILE = os.path.join(SCRIPT_DIR, "CONTINUE_FLAG")
+CONTINUE_FLAG_FILE = os.path.join(OUTPUT_DIR, "CONTINUE_FLAG_HISBG")
 
 # Output file name (will be continuously updated and tracked by Git)
-OUTPUT_FILE = os.path.join(SCRIPT_DIR, 'FINAL_DOCTORS_DATA.xlsx')
+OUTPUT_FILE = os.path.join(OUTPUT_DIR, 'HISBG_FINAL_DOCTORS_DATA.xlsx')
 
 MAX_RUNTIME_SECONDS = 20400  # 5 hours and 40 minutes limit
 START_TIME = time.time()
@@ -278,7 +281,6 @@ def save_multisheet_excel(hospitals, addresses, doctors):
         print(f"!!! CRITICAL: Failed to save Excel file: {e}")
 
 def main_loop():
-    # Remove old flag if present
     if os.path.exists(CONTINUE_FLAG_FILE):
         os.remove(CONTINUE_FLAG_FILE)
 
@@ -286,7 +288,6 @@ def main_loop():
     all_addresses = []
     all_doctors = []
 
-    # --- ПРОВЕРКА И ЗАРЕЖДАНЕ НА СЪЩЕСТВУВАЩ ФАЙЛ ---
     if os.path.exists(OUTPUT_FILE):
         print("[INFO] Съществуващ файл намерен. Зареждаме старите данни, за да не ги затриеме...")
         try:
@@ -303,14 +304,10 @@ def main_loop():
         except Exception as e:
             print(f"[WARN] Грешка при четене на стария файл. Стартираме на чисто: {e}")
 
-    # 1. Fetch targets completely autonomously
     all_ids = fetch_base_registry_ids()
-    
-    # 2. Load previously processed IDs
     processed_ids = get_processed_ids()
     print(f"Found {len(processed_ids)} previously processed IDs.")
 
-    # 3. Filter pending list
     pending_ids = [x for x in all_ids if x not in processed_ids]
     total_pending = len(pending_ids)
     
@@ -321,7 +318,6 @@ def main_loop():
     print(f"--- STARTING PROCESSING BATCH (Remaining targets: {total_pending}) ---")
     
     for i, id_number in enumerate(pending_ids):
-        # Enforce execution time limit to allow graceful workflow re-trigger
         elapsed = time.time() - START_TIME
         if elapsed > MAX_RUNTIME_SECONDS:
             print("\n[WARN] Execution time limit reached. Initiating graceful shutdown sequence.")
@@ -342,7 +338,6 @@ def main_loop():
             parse_data(data, all_hospitals, all_addresses, all_doctors)
             save_processed_id(id_number)
             
-            # Save optimization: Save periodically rather than on every single loop
             if (i + 1) % 50 == 0:
                 save_multisheet_excel(all_hospitals, all_addresses, all_doctors)
         else:
