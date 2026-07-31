@@ -3,7 +3,6 @@ name: Autonomous Medical Registry Scraper
 on:
   workflow_dispatch:
 
-# CRITICAL: Permissions required to commit tracking files and trigger workflows
 permissions:
   contents: write
   actions: write
@@ -39,13 +38,24 @@ jobs:
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           
-          git add processed_ids.txt
-          git add FINAL_DOCTORS_DATA.xlsx
+          # Създаваме папката и файла, ако липсват, за да не гръмне git add
+          mkdir -p hisbg_outputs
+          touch hisbg_outputs/hisbg_processed_ids.txt
+          
+          git add hisbg_outputs/hisbg_processed_ids.txt
+          
+          if [ -f "hisbg_outputs/HISBG_FINAL_DOCTORS_DATA.xlsx" ]; then
+            git add hisbg_outputs/HISBG_FINAL_DOCTORS_DATA.xlsx
+          fi
+          
+          if [ -f "hisbg_outputs/hisbg_city_dump.xlsx" ]; then
+            git add hisbg_outputs/hisbg_city_dump.xlsx
+          fi
           
           if git diff --staged --quiet; then
             echo "No new changes to commit."
           else
-            git commit -m "Auto-save state: Update processed_ids.txt and extracted medical data"
+            git commit -m "Auto-save state: Update his.bg processed IDs and extracted medical data"
             git push
           fi
 
@@ -53,7 +63,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [ -f "CONTINUE_FLAG" ]; then
+          if [ -f "hisbg_outputs/CONTINUE_FLAG_HISBG" ]; then
             echo "Continue flag detected. Script hit time limit. Triggering next workflow run..."
             gh workflow run "Autonomous Medical Registry Scraper"
           else
