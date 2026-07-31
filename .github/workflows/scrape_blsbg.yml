@@ -2,8 +2,6 @@ name: (blsbg.eu) Autonomous BLS BG Archive Scraper
 
 on:
   workflow_dispatch:
-  # schedule:
-  #   - cron: '0 2 * * *'
 
 permissions:
   contents: write
@@ -13,6 +11,11 @@ jobs:
   run-blsbg-pipeline:
     runs-on: ubuntu-latest
     
+    # Задаваме работната директория глобално за всички стъпки
+    defaults:
+      run:
+        working-directory: ./blsbg_scraper
+        
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -25,9 +28,11 @@ jobs:
           python-version: '3.10'
 
       - name: Install Dependencies
+        # Ако имаш requirements.txt в папката blsbg_scraper, използвай: pip install -r requirements.txt
+        # В противен случай си инсталирай нужните библиотеки ръчно:
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install pandas selenium webdriver-manager openpyxl
 
       - name: Execute Autonomous BLS BG Deep Scrape
         run: python scraper_blsbg.py
@@ -38,9 +43,9 @@ jobs:
         with:
           name: scraper-debug-files
           path: |
-            *.png
-            *.html
-            blsbg_outputs/*.txt
+            blsbg_scraper/*.png
+            blsbg_scraper/*.html
+            blsbg_scraper/blsbg_outputs/*.txt
           retention-days: 3
 
       - name: Commit Progress Tracker and Data
@@ -49,7 +54,7 @@ jobs:
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           
-          # Създаваме файла, ако скриптът не е стигнал до запис, за да не гърми git add
+          # Създаваме директорията и лог файла превантивно
           mkdir -p blsbg_outputs
           touch blsbg_outputs/processed_blsbg_pages.txt
           git add blsbg_outputs/processed_blsbg_pages.txt
@@ -72,7 +77,7 @@ jobs:
         run: |
           if [ -z "$GH_TOKEN" ]; then
             echo "============================================================"
-            echo "ERROR: PAT_TOKEN IS MISSING, YOU TOTAL NOOB!"
+            echo "ERROR: PAT_TOKEN IS MISSING!"
             echo "Go to Repo Settings -> Secrets and variables -> Actions"
             echo "Add a new secret named PAT_TOKEN with your GitHub PAT."
             echo "============================================================"
