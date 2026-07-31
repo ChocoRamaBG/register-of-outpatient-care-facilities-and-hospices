@@ -1,4 +1,4 @@
-name: Autonomous Medical Registry Scraper (his.bg)
+name: (his.bg) Autonomous Medical Registry Scraper
 
 on:
   workflow_dispatch:
