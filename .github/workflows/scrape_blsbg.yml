@@ -1,4 +1,4 @@
-name: Autonomous BLS BG Archive Scraper
+name: (blsbg.eu) Autonomous BLS BG Archive Scraper
 
 on:
   workflow_dispatch:
