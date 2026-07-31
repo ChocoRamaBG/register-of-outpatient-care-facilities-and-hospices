@@ -4,11 +4,14 @@ import os
 import sys
 
 try:
-    output_dir = os.path.dirname(os.path.abspath(__file__))
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 except NameError:
-    output_dir = os.getcwd()
+    SCRIPT_DIR = os.getcwd()
 
-output_file = os.path.join(output_dir, 'city_dump.xlsx')
+OUTPUT_DIR = os.path.join(SCRIPT_DIR, "hisbg_outputs")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+output_file = os.path.join(OUTPUT_DIR, 'hisbg_city_dump.xlsx')
 
 headers = {
     'accept': '*/*',
