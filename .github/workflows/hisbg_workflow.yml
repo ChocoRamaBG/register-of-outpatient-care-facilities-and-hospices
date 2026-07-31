@@ -35,8 +35,8 @@ jobs:
         run: python city_code_names.py
 
       - name: Execute Autonomous Deep Scrape
-        # Ако си преименувал main.py на scraper_hisbg.py, промени го и тук!
-        run: python main.py
+        # Тук викаме правилното име на файла, което се вижда в репото!
+        run: python scraper_hisbg.py
 
       - name: Commit Progress Tracker and Data
         run: |
@@ -70,7 +70,8 @@ jobs:
         run: |
           if [ -f "hisbg_outputs/CONTINUE_FLAG_HISBG" ]; then
             echo "Continue flag detected. Script hit time limit. Triggering next workflow run..."
-            gh workflow run "Autonomous Medical Registry Scraper"
+            # Името тук ТРЯБВА да съвпада точно с името най-горе във файла!
+            gh workflow run "(his.bg) Autonomous Medical Registry Scraper"
           else
             echo "No continue flag detected. Scraping is 100% complete."
           fi
