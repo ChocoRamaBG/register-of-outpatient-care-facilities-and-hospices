@@ -1,13 +1,17 @@
 # Excel files
 *.xlsx
 *.xls
-!FINAL_DOCTORS_DATA.xlsx
-!city_dump.xlsx
-!bg_medics_dynamic_2029.xlsx
 
-# Log files and flags
+# Exceptions for the data files we WANT to track
+!hisbg_scraper/hisbg_outputs/HISBG_FINAL_DOCTORS_DATA.xlsx
+!hisbg_scraper/hisbg_outputs/hisbg_city_dump.xlsx
+!blsbg_scraper/blsbg_outputs/bg_medics_dynamic_2029.xlsx
+
+# Log files and flags to ignore (we don't want flags in the repo)
 CONTINUE_FLAG
 CONTINUE_FLAG_BLSBG
+hisbg_scraper/hisbg_outputs/CONTINUE_FLAG_HISBG
+blsbg_scraper/blsbg_outputs/CONTINUE_FLAG_BLSBG
 
 # Python cache
 __pycache__/
