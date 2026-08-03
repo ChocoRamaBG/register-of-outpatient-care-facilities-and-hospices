@@ -50,17 +50,21 @@ jobs:
           git add hisbg_outputs/hisbg_processed_ids.txt
           
           if [ -f "hisbg_outputs/HISBG_FINAL_DOCTORS_DATA.xlsx" ]; then
-            git add hisbg_outputs/HISBG_FINAL_DOCTORS_DATA.xlsx
+            git add -f hisbg_outputs/HISBG_FINAL_DOCTORS_DATA.xlsx
           fi
           
           if [ -f "hisbg_outputs/hisbg_city_dump.xlsx" ]; then
-            git add hisbg_outputs/hisbg_city_dump.xlsx
+            git add -f hisbg_outputs/hisbg_city_dump.xlsx
           fi
           
           if git diff --staged --quiet; then
             echo "No new changes to commit."
           else
             git commit -m "Auto-save state: Update his.bg processed IDs and extracted medical data"
+            
+            # ИЗТЕГЛЯМЕ НОВИТЕ КОМИТИ ПРЕДИ ДА ПУШНЕМ, за да избегнем reject от сървъра
+            git pull --rebase origin main
+            
             git push
           fi
 
