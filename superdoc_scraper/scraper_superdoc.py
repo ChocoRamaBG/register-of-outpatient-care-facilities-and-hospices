@@ -5,6 +5,7 @@ import re
 import sys
 import csv
 import json
+import random
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -148,7 +149,8 @@ except Exception as e:
 # --- SCRAPING FUNCTIONS ---
 def scrape_calendar():
     try:
-        try: WebDriverWait(driver, 1).until(EC.presence_of_element_located((By.CLASS_NAME, "calendar-app")))
+        # FIX: Даваме повече време на AJAX заявката за графика да зареди!
+        try: WebDriverWait(driver, 4).until(EC.presence_of_element_located((By.CLASS_NAME, "calendar-app")))
         except: return "Няма календар"
 
         visible_calendar = get_visible_element_text(By.CLASS_NAME, "calendar-app")
@@ -357,7 +359,8 @@ def scrape_doctor_profile(url):
         try:
             rev_div = driver.find_element(By.CLASS_NAME, "review-number")
             raw_js = " ".join(driver.execute_script("return arguments[0].textContent;", rev_div).split())
-            rm = re.search(r"(\d+\.\d+)", raw_js)
+            # FIX: Хващаме и цели числа (като 5), не само десетични!
+            rm = re.search(r"(\d+(?:\.\d+)?)", raw_js)
             if rm: rating_val = rm.group(1)
             cm = re.search(r"(\d+)\s*оценки", raw_js)
             if cm: rev_count = cm.group(1)
@@ -485,6 +488,9 @@ try:
                 if u in parsed_urls:
                     continue
 
+                # FIX: Вкарваме delay, за да не сринем Cloudflare защитата!
+                time.sleep(random.uniform(1.5, 2.5)) 
+                
                 full_data = scrape_doctor_profile(u)
                 if full_data:
                     save_single_record(full_data)
