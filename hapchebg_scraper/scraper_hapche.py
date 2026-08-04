@@ -24,12 +24,12 @@ try:
 except NameError:
     base_dir = os.getcwd()
 
-output_dir = os.path.join(base_dir, "hapche_outputs")
+output_dir = os.path.join(base_dir, "hapchebg_outputs")
 os.makedirs(output_dir, exist_ok=True)
 
 state_file = os.path.join(output_dir, "savegame_v5_auto.json") 
 memory_file = os.path.join(output_dir, "parsed_urls.txt") 
-current_batch_filename = os.path.join(output_dir, "hapche_data_mega.csv")
+current_batch_filename = os.path.join(output_dir, "hapchebg_data_mega.csv")
 CONTINUE_FLAG_FILE = os.path.join(output_dir, "CONTINUE_FLAG_HAPCHE")
 
 # --- STATE AND MEMORY MANAGEMENT ---
