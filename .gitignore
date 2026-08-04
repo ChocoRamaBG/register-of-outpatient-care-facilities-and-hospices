@@ -13,6 +13,12 @@ CONTINUE_FLAG_BLSBG
 hisbg_scraper/hisbg_outputs/CONTINUE_FLAG_HISBG
 blsbg_scraper/blsbg_outputs/CONTINUE_FLAG_BLSBG
 
+!hapche_scraper/hapche_outputs/hapche_data_mega.csv
+!hapche_scraper/hapche_outputs/savegame_v5_auto.json
+!hapche_scraper/hapche_outputs/parsed_urls.txt
+
+hapche_scraper/hapche_outputs/CONTINUE_FLAG_HAPCHE
+
 # Python cache
 __pycache__/
 *.pyc
