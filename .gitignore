@@ -25,6 +25,12 @@ hapche_scraper/hapche_outputs/CONTINUE_FLAG_HAPCHE
 
 lekaribg_scraper/lekaribg_outputs/CONTINUE_FLAG_LEKARIBG
 
+!zdraven_arhiv_scraper/zdraven_arhiv_outputs/zdraven_arhiv_data_mega.csv
+!zdraven_arhiv_scraper/zdraven_arhiv_outputs/savegame_zdraven_arhiv.json
+!zdraven_arhiv_scraper/zdraven_arhiv_outputs/parsed_urls_zdraven_arhiv.txt
+
+zdraven_arhiv_scraper/zdraven_arhiv_outputs/CONTINUE_FLAG_ZDRAVEN_ARHIV
+
 # Python cache
 __pycache__/
 *.pyc
