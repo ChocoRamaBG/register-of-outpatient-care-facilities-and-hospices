@@ -14,6 +14,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.options import Options
+from selenium.common.exceptions import WebDriverException, TimeoutException
 
 # --- CONFIGURATION & PATHS ---
 START_TIME = time.time()
@@ -126,30 +127,34 @@ def save_single_record(record):
     except Exception as e:
         print(f"  [ERROR] Failed to append record to CSV: {e}")
 
-# --- WEBDRIVER INITIALIZATION ---
-print("[INFO] Configuring WebDriver instance...")
-options = Options()
-options.add_argument('--headless=new') 
-options.add_argument('--no-sandbox')
-options.add_argument('--disable-dev-shm-usage')
-options.add_argument('--disable-gpu')
-options.add_argument('--window-size=1920,1080')
-options.add_argument('--disable-blink-features=AutomationControlled')
-options.add_argument('--log-level=3') 
-options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+# --- AUTO-RESPAWN WEBDRIVER INITIALIZATION ---
+def create_driver():
+    print("[INFO] Booting up Chrome...")
+    options = Options()
+    options.add_argument('--headless=new') 
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--disable-gpu')
+    options.add_argument('--window-size=1920,1080')
+    options.add_argument('--disable-blink-features=AutomationControlled')
+    options.add_argument('--disable-features=site-per-process') # FIX OOM: Помага за освобождаване на памет
+    options.add_argument('--log-level=3') 
+    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
-try:
-    service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=options)
-    print("[SUCCESS] WebDriver instantiated successfully.")
-except Exception as e:
-    print(f"[CRITICAL] Failed to initiate WebDriver: {e}")
-    sys.exit(1)
+    try:
+        service = Service(ChromeDriverManager().install())
+        drv = webdriver.Chrome(service=service, options=options)
+        return drv
+    except Exception as e:
+        print(f"[CRITICAL] Failed to initiate WebDriver: {e}")
+        sys.exit(1)
+
+global driver
+driver = create_driver()
 
 # --- SCRAPING FUNCTIONS ---
 def scrape_calendar():
     try:
-        # FIX: Даваме повече време на AJAX заявката за графика да зареди!
         try: WebDriverWait(driver, 4).until(EC.presence_of_element_located((By.CLASS_NAME, "calendar-app")))
         except: return "Няма календар"
 
@@ -254,7 +259,7 @@ def scrape_prices():
     except: return "-"
 
 def get_active_location_data():
-    h_name, h_city, h_addr, h_phone, h_nzok, h_lat, h_lng = "-", "-", "-", "-", "-", "-", "-"
+    h_name = h_city = h_addr = h_phone = h_nzok = h_lat = h_lng = "-"
     try:
         name_el = get_visible_element_text(By.XPATH, "//*[@itemprop='memberOf']")
         if name_el: h_name = name_el.text.strip()
@@ -346,8 +351,8 @@ def get_active_location_data():
     return h_name, h_city, h_addr, h_phone, h_nzok, h_lat, h_lng
 
 def scrape_doctor_profile(url):
-    driver.get(url)
     try:
+        driver.get(url)
         if "403 Forbidden" in driver.title:
             print(f"[CRITICAL] ACCESS DENIED (403) for {url}")
             return None
@@ -359,7 +364,6 @@ def scrape_doctor_profile(url):
         try:
             rev_div = driver.find_element(By.CLASS_NAME, "review-number")
             raw_js = " ".join(driver.execute_script("return arguments[0].textContent;", rev_div).split())
-            # FIX: Хващаме и цели числа (като 5), не само десетични!
             rm = re.search(r"(\d+(?:\.\d+)?)", raw_js)
             if rm: rating_val = rm.group(1)
             cm = re.search(r"(\d+)\s*оценки", raw_js)
@@ -404,9 +408,10 @@ def scrape_doctor_profile(url):
                         h_insurances = scrape_insurances()
                     except Exception as e:
                         h_name = f"Error: {e}"
-                        h_city, h_addr, h_phone, h_nzok, h_sched, h_lat, h_lng, h_prices, h_insurances = "-", "-", "-", "-", "-", "-", "-", "-", "-"
+                        # FIX 1: Верижно присвояване, за да няма проблем с разопаковането!
+                        h_city = h_addr = h_phone = h_nzok = h_sched = h_lat = h_lng = h_prices = h_insurances = "-"
                 else:
-                     h_name, h_city, h_addr, h_phone, h_nzok, h_sched, h_lat, h_lng, h_prices, h_insurances = "-", "-", "-", "-", "-", "-", "-", "-", "-"
+                     h_name = h_city = h_addr = h_phone = h_nzok = h_sched = h_lat = h_lng = h_prices = h_insurances = "-"
                 
                 doc_info[f"Болница{sfx}"] = h_name
                 doc_info[f"Град{sfx}"] = h_city
@@ -427,7 +432,7 @@ def scrape_doctor_profile(url):
                 h_insurances = scrape_insurances()
              except Exception as e:
                 h_name = f"Error: {e}"
-                h_city, h_addr, h_phone, h_nzok, h_sched, h_lat, h_lng, h_prices, h_insurances = "-", "-", "-", "-", "-", "-", "-", "-", "-"
+                h_city = h_addr = h_phone = h_nzok = h_sched = h_lat = h_lng = h_prices = h_insurances = "-"
             
              doc_info[f"Болница{sfx}"] = h_name
              doc_info[f"Град{sfx}"] = h_city
@@ -446,9 +451,18 @@ def scrape_doctor_profile(url):
                      doc_info[f"{field}{sfx}"] = "-"
 
         return doc_info
+
+    # FIX 2: Прихващаме OOM крашовете вътре в профила и ги хвърляме към главния цикъл, за да рестартира браузъра
+    except WebDriverException as we:
+        error_msg = str(we).lower()
+        if "crashed" in error_msg or "disconnected" in error_msg:
+            raise we
+        print(f"[ERROR] WebDriver Exception on profile {url}: {we}")
+        return None
     except Exception as e:
         print(f"[ERROR] Profile extraction failure: {e}")
         return None
+
 
 # --- PIPELINE EXECUTION ---
 if os.path.exists(CONTINUE_FLAG_FILE):
@@ -469,9 +483,10 @@ try:
 
         target_url = f"https://superdoc.bg/lekari?sort=latest&page={page}"
         print(f"  > Processing PAGE {page}...")
-        driver.get(target_url)
         
         try:
+            driver.get(target_url)
+            
             try:
                 WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.CLASS_NAME, "search-result-link")))
             except:
@@ -488,7 +503,6 @@ try:
                 if u in parsed_urls:
                     continue
 
-                # FIX: Вкарваме delay, за да не сринем Cloudflare защитата!
                 time.sleep(random.uniform(1.5, 2.5)) 
                 
                 full_data = scrape_doctor_profile(u)
@@ -498,6 +512,21 @@ try:
             
             page += 1
             save_state(page)
+
+        # ХВАЩАМЕ КРАША ТУК И ПРАВИМ RESPAWN
+        except WebDriverException as we:
+            error_msg = str(we).lower()
+            if "crashed" in error_msg or "disconnected" in error_msg or "out of memory" in error_msg:
+                print(f"  [CRITICAL] Chrome tab crashed on page {page}! Rebooting WebDriver to recover...")
+                try: driver.quit()
+                except: pass
+                time.sleep(3)
+                driver = create_driver() 
+                # Използваме continue, за да не увеличаваме страницата, а да я завъртим наново
+                continue
+            else:
+                print(f"[CRITICAL] Page iteration failure on page {page}: {we}")
+                break
 
         except Exception as e:
             print(f"[CRITICAL] Page iteration failure on page {page}: {e}")
