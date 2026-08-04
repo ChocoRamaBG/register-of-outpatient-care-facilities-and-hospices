@@ -19,6 +19,12 @@ blsbg_scraper/blsbg_outputs/CONTINUE_FLAG_BLSBG
 
 hapche_scraper/hapche_outputs/CONTINUE_FLAG_HAPCHE
 
+!lekaribg_scraper/lekaribg_outputs/lekaribg_data_mega.csv
+!lekaribg_scraper/lekaribg_outputs/savegame_lekaribg.json
+!lekaribg_scraper/lekaribg_outputs/parsed_urls_lekaribg.txt
+
+lekaribg_scraper/lekaribg_outputs/CONTINUE_FLAG_LEKARIBG
+
 # Python cache
 __pycache__/
 *.pyc
