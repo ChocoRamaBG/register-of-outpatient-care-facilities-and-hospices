@@ -82,7 +82,6 @@ options.add_argument('--no-sandbox')
 options.add_argument('--disable-dev-shm-usage')
 options.add_argument('--disable-gpu')
 options.add_argument('--window-size=1920,1080')
-# ПРЕМАХНАТО: options.page_load_strategy = 'eager' (Причиняваше зареждане само на 5 записа)
 options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
 
 try:
@@ -198,60 +197,87 @@ try:
         target_url = "https://zdraven-arhiv.com/doctors/" if page == 1 else f"https://zdraven-arhiv.com/doctors/?jsf=jet-engine&pagenum={page}"
             
         print(f"  > Processing PAGE {page}...")
-        driver.get(target_url)
         
-        try:
+        # --- THE BRUTAL REFRESH LOOP ---
+        page_loaded = False
+        retries = 0
+        cards = []
+        
+        while not page_loaded:
+            # Check global timeout inside the retry loop as well
+            if (time.time() - START_TIME) > TIME_LIMIT_SECONDS:
+                break
+                
+            driver.get(target_url)
+            
             if "404" in driver.title or "Страницата не е намерена" in driver.page_source:
                  print("  [INFO] 404 Not Found. Pagination complete.")
+                 page_loaded = True
                  break
 
-            wait_time = 10 if page == 1 else 5
             try:
-                WebDriverWait(driver, wait_time).until(EC.presence_of_element_located((By.CLASS_NAME, "jet-listing-grid__item")))
-                # FIX: Изчакваме допълнително, за да може JS да рендерира всички записи в решетката
-                time.sleep(3)
-            except:
-                print("  [INFO] Exhausted records. Concluding.")
-                break
-
-            cards = driver.find_elements(By.XPATH, "//div[contains(@class, 'jet-listing-grid__item')]")
-            if not cards: break
-
-            print(f"  [INFO] Found {len(cards)} doctors on the page.")
-
-            doctors_on_page = []
-            for card in cards:
-                try:
-                    link_el = card.find_element(By.CSS_SELECTOR, "a.jet-listing-dynamic-link__link")
-                    url = link_el.get_attribute("href")
-                    name = link_el.text.strip()
-                    
-                    if not url: continue
-                    
-                    doc_data = {
-                        "Име": name,
-                        "URL": url,
-                        "Описание (Лист)": "-" 
-                    }
-                    doctors_on_page.append(doc_data)
-                except: continue
-
-            for doc in doctors_on_page:
-                doc_url = doc['URL']
+                # Даваме му 15 секунди да намери поне един запис
+                WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.CLASS_NAME, "jet-listing-grid__item")))
+                # И още 5 секунди аванс за мазния JavaScript да нарисува всичко останало
+                time.sleep(5)
                 
-                if doc_url in parsed_urls:
-                    continue
+                cards = driver.find_elements(By.XPATH, "//div[contains(@class, 'jet-listing-grid__item')]")
+                if cards:
+                    page_loaded = True
+                    print(f"  [INFO] Successfully loaded {len(cards)} doctors on page {page}.")
+                else:
+                    raise Exception("Cards array empty despite explicit wait.")
+                    
+            except Exception as e:
+                retries += 1
+                print(f"  [WARN] Site is being shitty. Refreshing... (Attempt {retries})")
+                time.sleep(3)
+                
+                # Предпазител: Ако ударим 15 поредни рефреша без успех, значи просто няма повече данни.
+                if retries > 15:
+                    print("  [INFO] 15 failed retries. Assuming end of records. Concluding.")
+                    page_loaded = True
+                    break
 
-                full_data = scrape_inner_profile(doc_url, doc)
-                save_single_record(full_data)
-                mark_as_parsed(doc_url)
-
-            page += 1
-            save_state(page)
-            
-        except Exception as e:
-            print(f"[CRITICAL] Page iteration failure on page {page}: {e}")
+        # Safety break if global time limit hit during refresh loop
+        if (time.time() - START_TIME) > TIME_LIMIT_SECONDS:
+            with open(CONTINUE_FLAG_FILE, 'w') as f:
+                f.write("CONTINUE_REQUIRED")
+            timeout_reached = True
             break
+            
+        if not cards: 
+            break
+
+        doctors_on_page = []
+        for card in cards:
+            try:
+                link_el = card.find_element(By.CSS_SELECTOR, "a.jet-listing-dynamic-link__link")
+                url = link_el.get_attribute("href")
+                name = link_el.text.strip()
+                
+                if not url: continue
+                
+                doc_data = {
+                    "Име": name,
+                    "URL": url,
+                    "Описание (Лист)": "-" 
+                }
+                doctors_on_page.append(doc_data)
+            except: continue
+
+        for doc in doctors_on_page:
+            doc_url = doc['URL']
+            
+            if doc_url in parsed_urls:
+                continue
+
+            full_data = scrape_inner_profile(doc_url, doc)
+            save_single_record(full_data)
+            mark_as_parsed(doc_url)
+
+        page += 1
+        save_state(page)
 
 except Exception as e:
     print(f"[CRITICAL] Global pipeline failure: {e}")
