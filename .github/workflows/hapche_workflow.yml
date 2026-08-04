@@ -1,4 +1,4 @@
-name: (hapche) Autonomous Registry Scraper
+name: (hapche.bg) Autonomous Registry Scraper
 
 on:
   workflow_dispatch:
