@@ -1,4 +1,4 @@
-name: (superdoc) Autonomous Registry Scraper
+name: (superdoc.bg) Autonomous Registry Scraper
 
 on:
   workflow_dispatch:
