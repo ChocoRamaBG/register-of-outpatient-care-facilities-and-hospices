@@ -31,6 +31,12 @@ lekaribg_scraper/lekaribg_outputs/CONTINUE_FLAG_LEKARIBG
 
 zdraven_arhiv_scraper/zdraven_arhiv_outputs/CONTINUE_FLAG_ZDRAVEN_ARHIV
 
+!superdoc_scraper/superdoc_outputs/superdoc_data_mega.csv
+!superdoc_scraper/superdoc_outputs/savegame_superdoc.json
+!superdoc_scraper/superdoc_outputs/parsed_urls_superdoc.txt
+
+superdoc_scraper/superdoc_outputs/CONTINUE_FLAG_SUPERDOC
+
 # Python cache
 __pycache__/
 *.pyc
