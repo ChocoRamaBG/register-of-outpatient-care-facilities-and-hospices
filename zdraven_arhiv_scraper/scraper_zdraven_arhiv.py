@@ -82,7 +82,7 @@ options.add_argument('--no-sandbox')
 options.add_argument('--disable-dev-shm-usage')
 options.add_argument('--disable-gpu')
 options.add_argument('--window-size=1920,1080')
-options.page_load_strategy = 'eager'
+# ПРЕМАХНАТО: options.page_load_strategy = 'eager' (Причиняваше зареждане само на 5 записа)
 options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
 
 try:
@@ -208,12 +208,16 @@ try:
             wait_time = 10 if page == 1 else 5
             try:
                 WebDriverWait(driver, wait_time).until(EC.presence_of_element_located((By.CLASS_NAME, "jet-listing-grid__item")))
+                # FIX: Изчакваме допълнително, за да може JS да рендерира всички записи в решетката
+                time.sleep(3)
             except:
                 print("  [INFO] Exhausted records. Concluding.")
                 break
 
             cards = driver.find_elements(By.XPATH, "//div[contains(@class, 'jet-listing-grid__item')]")
             if not cards: break
+
+            print(f"  [INFO] Found {len(cards)} doctors on the page.")
 
             doctors_on_page = []
             for card in cards:
