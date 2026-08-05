@@ -84,7 +84,7 @@ def create_driver():
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--disable-gpu')
     options.add_argument('--window-size=1920,1080')
-    options.add_argument('--disable-features=site-per-process') # Помага срещу OOM крашове
+    options.add_argument('--disable-features=site-per-process')
     options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
 
     try:
@@ -95,7 +95,7 @@ def create_driver():
         print(f"[CRITICAL] Failed to initiate WebDriver: {e}")
         sys.exit(1)
 
-global driver
+# Създаваме драйвъра (без излишен global, тъй като сме на module level)
 driver = create_driver()
 
 # --- CORE FUNCTIONS ---
@@ -175,7 +175,6 @@ def scrape_inner_profile(url, basic_info):
             "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         })
         
-    # Изхвърляме критичните крашове към главния цикъл, за да рестартира браузъра
     except WebDriverException as we:
         error_msg = str(we).lower()
         if "crashed" in error_msg or "disconnected" in error_msg or "out of memory" in error_msg:
@@ -210,7 +209,6 @@ try:
         print(f"  > Processing PAGE {page}...")
         
         try:
-            # --- THE INFINITE REFRESH LOOP ---
             page_loaded = False
             retries = 0
             cards = []
@@ -246,7 +244,7 @@ try:
                         try: driver.quit()
                         except: pass
                         time.sleep(3)
-                        global driver
+                        # Преназначаваме глобалната променлива директно
                         driver = create_driver()
                         continue
                     else:
@@ -258,14 +256,13 @@ try:
                     print(f"  [WARN] Site timeout/error. Refreshing... (Attempt {retries} / INFINITE)")
                     time.sleep(3)
 
-            # Safety break if global time limit hit during refresh loop
             if (time.time() - START_TIME) > TIME_LIMIT_SECONDS:
                 with open(CONTINUE_FLAG_FILE, 'w') as f:
                     f.write("CONTINUE_REQUIRED")
                 timeout_reached = True
                 break
                 
-            if end_of_records:
+            if end_of_records or not cards:
                 break
 
             doctors_on_page = []
@@ -298,7 +295,6 @@ try:
             page += 1
             save_state(page)
 
-        # Хващаме краш на таба, ако се е случил ВЪТРЕ в scrape_inner_profile
         except WebDriverException as we:
             error_msg = str(we).lower()
             if "crashed" in error_msg or "disconnected" in error_msg or "out of memory" in error_msg:
@@ -307,7 +303,6 @@ try:
                 except: pass
                 time.sleep(3)
                 driver = create_driver()
-                # Използваме continue, за да не увеличаваме страницата, а да я завъртим наново
                 continue
             else:
                 print(f"[CRITICAL] Unexpected WebDriver error: {we}")
