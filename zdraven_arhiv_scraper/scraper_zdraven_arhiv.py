@@ -13,6 +13,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.options import Options
+from selenium.common.exceptions import WebDriverException
 
 # --- CONFIGURATION & PATHS ---
 START_TIME = time.time()
@@ -74,23 +75,28 @@ if not os.path.exists(current_batch_filename):
     except Exception as e:
         print(f"[ERROR] Failed to initialize CSV structure: {e}")
 
-# --- WEBDRIVER INITIALIZATION ---
-print("[INFO] Configuring WebDriver instance...")
-options = Options()
-options.add_argument('--headless=new') 
-options.add_argument('--no-sandbox')
-options.add_argument('--disable-dev-shm-usage')
-options.add_argument('--disable-gpu')
-options.add_argument('--window-size=1920,1080')
-options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+# --- AUTO-RESPAWN WEBDRIVER INITIALIZATION ---
+def create_driver():
+    print("[INFO] Booting up Chrome...")
+    options = Options()
+    options.add_argument('--headless=new') 
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--disable-gpu')
+    options.add_argument('--window-size=1920,1080')
+    options.add_argument('--disable-features=site-per-process') # Помага срещу OOM крашове
+    options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
 
-try:
-    service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=options)
-    print("[SUCCESS] WebDriver instantiated successfully.")
-except Exception as e:
-    print(f"[CRITICAL] Failed to initiate WebDriver: {e}")
-    sys.exit(1)
+    try:
+        service = Service(ChromeDriverManager().install())
+        drv = webdriver.Chrome(service=service, options=options)
+        return drv
+    except Exception as e:
+        print(f"[CRITICAL] Failed to initiate WebDriver: {e}")
+        sys.exit(1)
+
+global driver
+driver = create_driver()
 
 # --- CORE FUNCTIONS ---
 def save_single_record(record):
@@ -128,9 +134,7 @@ def scrape_inner_profile(url, basic_info):
                     if text not in phones: phones.append(text)
                 elif len(text) > 10:
                     if text not in possible_addresses: possible_addresses.append(text)
-                    
-        except Exception:
-            pass
+        except: pass
 
         map_pin_address = "-"
         clickable_map_link = "-"
@@ -171,6 +175,13 @@ def scrape_inner_profile(url, basic_info):
             "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         })
         
+    # Изхвърляме критичните крашове към главния цикъл, за да рестартира браузъра
+    except WebDriverException as we:
+        error_msg = str(we).lower()
+        if "crashed" in error_msg or "disconnected" in error_msg or "out of memory" in error_msg:
+            raise we
+        print(f"[ERROR] Profile extraction failure: {we}")
+        basic_info.update({"Note": "Profile Scrape Failed"})
     except Exception as e:
         print(f"[ERROR] Profile extraction failure: {e}")
         basic_info.update({"Note": "Profile Scrape Failed"})
@@ -198,86 +209,113 @@ try:
             
         print(f"  > Processing PAGE {page}...")
         
-        # --- THE BRUTAL REFRESH LOOP ---
-        page_loaded = False
-        retries = 0
-        cards = []
-        
-        while not page_loaded:
-            # Check global timeout inside the retry loop as well
+        try:
+            # --- THE INFINITE REFRESH LOOP ---
+            page_loaded = False
+            retries = 0
+            cards = []
+            end_of_records = False
+            
+            while not page_loaded:
+                if (time.time() - START_TIME) > TIME_LIMIT_SECONDS:
+                    break
+                    
+                try:
+                    driver.get(target_url)
+                    
+                    if "404" in driver.title or "Страницата не е намерена" in driver.page_source:
+                         print("  [INFO] 404 Not Found. Pagination complete.")
+                         page_loaded = True
+                         end_of_records = True
+                         break
+
+                    WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.CLASS_NAME, "jet-listing-grid__item")))
+                    time.sleep(5)
+                    
+                    cards = driver.find_elements(By.XPATH, "//div[contains(@class, 'jet-listing-grid__item')]")
+                    if cards:
+                        page_loaded = True
+                        print(f"  [INFO] Successfully loaded {len(cards)} doctors on page {page}.")
+                    else:
+                        raise Exception("Cards array empty despite explicit wait.")
+                        
+                except WebDriverException as we:
+                    error_msg = str(we).lower()
+                    if "crashed" in error_msg or "disconnected" in error_msg or "out of memory" in error_msg:
+                        print(f"  [CRITICAL] Chrome tab crashed! Rebooting WebDriver to recover...")
+                        try: driver.quit()
+                        except: pass
+                        time.sleep(3)
+                        global driver
+                        driver = create_driver()
+                        continue
+                    else:
+                        retries += 1
+                        print(f"  [WARN] Site timeout/error. Refreshing... (Attempt {retries} / INFINITE)")
+                        time.sleep(3)
+                except Exception as e:
+                    retries += 1
+                    print(f"  [WARN] Site timeout/error. Refreshing... (Attempt {retries} / INFINITE)")
+                    time.sleep(3)
+
+            # Safety break if global time limit hit during refresh loop
             if (time.time() - START_TIME) > TIME_LIMIT_SECONDS:
+                with open(CONTINUE_FLAG_FILE, 'w') as f:
+                    f.write("CONTINUE_REQUIRED")
+                timeout_reached = True
                 break
                 
-            driver.get(target_url)
-            
-            if "404" in driver.title or "Страницата не е намерена" in driver.page_source:
-                 print("  [INFO] 404 Not Found. Pagination complete.")
-                 page_loaded = True
-                 break
+            if end_of_records:
+                break
 
-            try:
-                # Даваме му 15 секунди да намери поне един запис
-                WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.CLASS_NAME, "jet-listing-grid__item")))
-                # И още 5 секунди аванс за мазния JavaScript да нарисува всичко останало
-                time.sleep(5)
-                
-                cards = driver.find_elements(By.XPATH, "//div[contains(@class, 'jet-listing-grid__item')]")
-                if cards:
-                    page_loaded = True
-                    print(f"  [INFO] Successfully loaded {len(cards)} doctors on page {page}.")
-                else:
-                    raise Exception("Cards array empty despite explicit wait.")
+            doctors_on_page = []
+            for card in cards:
+                try:
+                    link_el = card.find_element(By.CSS_SELECTOR, "a.jet-listing-dynamic-link__link")
+                    url = link_el.get_attribute("href")
+                    name = link_el.text.strip()
                     
-            except Exception as e:
-                retries += 1
-                print(f"  [WARN] Site is being shitty. Refreshing... (Attempt {retries})")
+                    if not url: continue
+                    
+                    doc_data = {
+                        "Име": name,
+                        "URL": url,
+                        "Описание (Лист)": "-" 
+                    }
+                    doctors_on_page.append(doc_data)
+                except: continue
+
+            for doc in doctors_on_page:
+                doc_url = doc['URL']
+                
+                if doc_url in parsed_urls:
+                    continue
+
+                full_data = scrape_inner_profile(doc_url, doc)
+                save_single_record(full_data)
+                mark_as_parsed(doc_url)
+
+            page += 1
+            save_state(page)
+
+        # Хващаме краш на таба, ако се е случил ВЪТРЕ в scrape_inner_profile
+        except WebDriverException as we:
+            error_msg = str(we).lower()
+            if "crashed" in error_msg or "disconnected" in error_msg or "out of memory" in error_msg:
+                print(f"  [CRITICAL] Chrome tab crashed during profile extraction! Rebooting WebDriver...")
+                try: driver.quit()
+                except: pass
                 time.sleep(3)
-                
-                # Предпазител: Ако ударим 15 поредни рефреша без успех, значи просто няма повече данни.
-                if retries > 15:
-                    print("  [INFO] 15 failed retries. Assuming end of records. Concluding.")
-                    page_loaded = True
-                    break
-
-        # Safety break if global time limit hit during refresh loop
-        if (time.time() - START_TIME) > TIME_LIMIT_SECONDS:
-            with open(CONTINUE_FLAG_FILE, 'w') as f:
-                f.write("CONTINUE_REQUIRED")
-            timeout_reached = True
-            break
-            
-        if not cards: 
-            break
-
-        doctors_on_page = []
-        for card in cards:
-            try:
-                link_el = card.find_element(By.CSS_SELECTOR, "a.jet-listing-dynamic-link__link")
-                url = link_el.get_attribute("href")
-                name = link_el.text.strip()
-                
-                if not url: continue
-                
-                doc_data = {
-                    "Име": name,
-                    "URL": url,
-                    "Описание (Лист)": "-" 
-                }
-                doctors_on_page.append(doc_data)
-            except: continue
-
-        for doc in doctors_on_page:
-            doc_url = doc['URL']
-            
-            if doc_url in parsed_urls:
+                driver = create_driver()
+                # Използваме continue, за да не увеличаваме страницата, а да я завъртим наново
                 continue
+            else:
+                print(f"[CRITICAL] Unexpected WebDriver error: {we}")
+                break
 
-            full_data = scrape_inner_profile(doc_url, doc)
-            save_single_record(full_data)
-            mark_as_parsed(doc_url)
-
-        page += 1
-        save_state(page)
+        except Exception as e:
+            print(f"[CRITICAL] Page iteration failure on page {page}: {e}")
+            break
 
 except Exception as e:
     print(f"[CRITICAL] Global pipeline failure: {e}")
