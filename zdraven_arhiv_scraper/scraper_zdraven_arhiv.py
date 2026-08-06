@@ -29,23 +29,24 @@ os.makedirs(output_dir, exist_ok=True)
 
 state_file = os.path.join(output_dir, "savegame_zdraven_arhiv.json")
 memory_file = os.path.join(output_dir, "parsed_urls_zdraven_arhiv.txt")
+failed_pages_file = os.path.join(output_dir, "failed_pages_zdraven_arhiv.json")
 current_batch_filename = os.path.join(output_dir, "zdraven_arhiv_data_mega.csv")
 CONTINUE_FLAG_FILE = os.path.join(output_dir, "CONTINUE_FLAG_ZDRAVEN_ARHIV")
 
 # --- STATE AND MEMORY MANAGEMENT ---
-state = {"page": 1}
+state = {"page": 1, "phase": 1}
 if os.path.exists(state_file):
     try:
         with open(state_file, "r") as f:
             state = json.load(f)
-            print(f"[INFO] Resuming execution from Page {state['page']}.")
+            print(f"[INFO] Resuming execution from Phase {state.get('phase', 1)}, Page {state['page']}.")
     except Exception:
         print("[WARN] Corrupted state file detected. Initializing new state.")
-        state = {"page": 1}
+        state = {"page": 1, "phase": 1}
 
-def save_state(page):
+def save_state(page, phase=1):
     with open(state_file, "w") as f:
-        json.dump({"page": page}, f)
+        json.dump({"page": page, "phase": phase}, f)
 
 parsed_urls = set()
 if os.path.exists(memory_file):
@@ -59,6 +60,25 @@ def mark_as_parsed(url):
     parsed_urls.add(url)
     with open(memory_file, "a", encoding="utf-8") as f:
         f.write(url + "\n")
+
+# --- FAILED PAGES MANAGEMENT ---
+def load_failed_pages():
+    if os.path.exists(failed_pages_file):
+        try:
+            with open(failed_pages_file, "r") as f:
+                return json.load(f)
+        except: return []
+    return []
+
+def save_failed_pages(failed_list):
+    with open(failed_pages_file, "w") as f:
+        json.dump(failed_list, f)
+
+def add_failed_page(page_num):
+    pages = load_failed_pages()
+    if page_num not in pages:
+        pages.append(page_num)
+        save_failed_pages(pages)
 
 # --- DATA SCHEMA CONFIGURATION ---
 fieldnames = [
@@ -95,7 +115,6 @@ def create_driver():
         print(f"[CRITICAL] Failed to initiate WebDriver: {e}")
         sys.exit(1)
 
-# Създаваме драйвъра (без излишен global, тъй като сме на module level)
 driver = create_driver()
 
 # --- CORE FUNCTIONS ---
@@ -117,17 +136,12 @@ def scrape_inner_profile(url, basic_info):
             WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.CLASS_NAME, "elementor-widget-icon-box")))
         except: pass
 
-        phones = []
-        emails = []
-        possible_addresses = []
-        
+        phones, emails, possible_addresses = [], [], []
         try:
             box_titles = driver.find_elements(By.CSS_SELECTOR, ".elementor-widget-icon-box .elementor-icon-box-title span")
-            
             for title_el in box_titles:
                 text = title_el.text.strip()
                 if not text: continue
-                
                 if "@" in text:
                     if text not in emails: emails.append(text)
                 elif re.search(r"(\+359|08[789]|02)", text) and len(text) < 20:
@@ -136,17 +150,13 @@ def scrape_inner_profile(url, basic_info):
                     if text not in possible_addresses: possible_addresses.append(text)
         except: pass
 
-        map_pin_address = "-"
-        clickable_map_link = "-"
-        
+        map_pin_address = clickable_map_link = "-"
         try:
             iframe = driver.find_element(By.CSS_SELECTOR, "iframe[src*='maps.google.com']")
             raw_address = iframe.get_attribute("title") or iframe.get_attribute("aria-label")
-            
             if raw_address:
                 map_pin_address = raw_address
-                encoded_address = urllib.parse.quote(raw_address)
-                clickable_map_link = f"https://www.google.com/maps/search/?api=1&query={encoded_address}"
+                clickable_map_link = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(raw_address)}"
         except: pass
 
         text_address = map_pin_address if map_pin_address != "-" else (possible_addresses[0] if possible_addresses else "-")
@@ -176,13 +186,10 @@ def scrape_inner_profile(url, basic_info):
         })
         
     except WebDriverException as we:
-        error_msg = str(we).lower()
-        if "crashed" in error_msg or "disconnected" in error_msg or "out of memory" in error_msg:
+        if "crashed" in str(we).lower() or "disconnected" in str(we).lower() or "out of memory" in str(we).lower():
             raise we
-        print(f"[ERROR] Profile extraction failure: {we}")
         basic_info.update({"Note": "Profile Scrape Failed"})
     except Exception as e:
-        print(f"[ERROR] Profile extraction failure: {e}")
         basic_info.update({"Note": "Profile Scrape Failed"})
     
     return basic_info
@@ -191,9 +198,9 @@ def scrape_inner_profile(url, basic_info):
 if os.path.exists(CONTINUE_FLAG_FILE):
     os.remove(CONTINUE_FLAG_FILE)
 
+current_phase = state.get("phase", 1)
 page = state["page"]
-print(f"[INFO] Initializing sequence starting at page {page}.")
-timeout_reached = False
+print(f"[INFO] Initializing sequence starting at Phase {current_phase}, Page {page}.")
 
 try:
     while True:
@@ -201,116 +208,164 @@ try:
             print("\n[WARN] Execution time limit threshold reached. Initiating graceful shutdown...")
             with open(CONTINUE_FLAG_FILE, 'w') as f:
                 f.write("CONTINUE_REQUIRED")
-            timeout_reached = True
             break
 
-        target_url = "https://zdraven-arhiv.com/doctors/" if page == 1 else f"https://zdraven-arhiv.com/doctors/?jsf=jet-engine&pagenum={page}"
+        # ==========================================
+        # PHASE 1: БЪРЗА МЕТЛА (Нормален обход)
+        # ==========================================
+        if current_phase == 1:
+            target_url = "https://zdraven-arhiv.com/doctors/" if page == 1 else f"https://zdraven-arhiv.com/doctors/?jsf=jet-engine&pagenum={page}"
+            print(f"  > [Phase 1] Processing PAGE {page}...")
             
-        print(f"  > Processing PAGE {page}...")
-        
-        try:
             page_loaded = False
             retries = 0
             cards = []
             end_of_records = False
             
             while not page_loaded:
-                if (time.time() - START_TIME) > TIME_LIMIT_SECONDS:
-                    break
-                    
+                if (time.time() - START_TIME) > TIME_LIMIT_SECONDS: break
+                
                 try:
                     driver.get(target_url)
-                    
                     if "404" in driver.title or "Страницата не е намерена" in driver.page_source:
-                         print("  [INFO] 404 Not Found. Pagination complete.")
+                         print("  [INFO] 404 Not Found. Phase 1 complete.")
                          page_loaded = True
                          end_of_records = True
                          break
 
-                    WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.CLASS_NAME, "jet-listing-grid__item")))
-                    time.sleep(5)
+                    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, "jet-listing-grid__item")))
+                    time.sleep(2)
                     
                     cards = driver.find_elements(By.XPATH, "//div[contains(@class, 'jet-listing-grid__item')]")
                     if cards:
                         page_loaded = True
                         print(f"  [INFO] Successfully loaded {len(cards)} doctors on page {page}.")
                     else:
-                        raise Exception("Cards array empty despite explicit wait.")
+                        raise Exception("Cards array empty")
                         
                 except WebDriverException as we:
-                    error_msg = str(we).lower()
-                    if "crashed" in error_msg or "disconnected" in error_msg or "out of memory" in error_msg:
-                        print(f"  [CRITICAL] Chrome tab crashed! Rebooting WebDriver to recover...")
+                    if "crashed" in str(we).lower() or "disconnected" in str(we).lower() or "out of memory" in str(we).lower():
+                        print(f"  [CRITICAL] Chrome tab crashed! Rebooting WebDriver...")
                         try: driver.quit()
                         except: pass
-                        time.sleep(3)
-                        # Преназначаваме глобалната променлива директно
                         driver = create_driver()
                         continue
-                    else:
-                        retries += 1
-                        print(f"  [WARN] Site timeout/error. Refreshing... (Attempt {retries} / INFINITE)")
-                        time.sleep(3)
-                except Exception as e:
                     retries += 1
-                    print(f"  [WARN] Site timeout/error. Refreshing... (Attempt {retries} / INFINITE)")
+                    time.sleep(2)
+                except Exception:
+                    retries += 1
+                    time.sleep(2)
+
+                # ТУК Е МАГИЯТА ЗА ФАЗА 1: Ако се счупи 3 пъти, я скипваме!
+                if retries >= 3:
+                    print(f"  [WARN] Page {page} is unresponsive (PHP OOM/Timeout). Skipping to next page (will retry in Phase 2).")
+                    add_failed_page(page)
+                    page_loaded = True
+                    break
+
+            if (time.time() - START_TIME) > TIME_LIMIT_SECONDS:
+                with open(CONTINUE_FLAG_FILE, 'w') as f: f.write("CONTINUE_REQUIRED")
+                break
+                
+            if end_of_records:
+                print("[INFO] Phase 1 finished! Transitioning to Phase 2 (Retry failed pages)...")
+                current_phase = 2
+                save_state(page=1, phase=2)
+                continue
+
+            if cards:
+                doctors_on_page = []
+                for card in cards:
+                    try:
+                        link_el = card.find_element(By.CSS_SELECTOR, "a.jet-listing-dynamic-link__link")
+                        url = link_el.get_attribute("href")
+                        name = link_el.text.strip()
+                        if url: doctors_on_page.append({"Име": name, "URL": url, "Описание (Лист)": "-"})
+                    except: continue
+
+                for doc in doctors_on_page:
+                    doc_url = doc['URL']
+                    if doc_url in parsed_urls: continue
+                    full_data = scrape_inner_profile(doc_url, doc)
+                    save_single_record(full_data)
+                    mark_as_parsed(doc_url)
+
+            page += 1
+            save_state(page, phase=1)
+
+        # ==========================================
+        # PHASE 2: БЕЗКРАЕН ТЕРОР (Счупените страници)
+        # ==========================================
+        elif current_phase == 2:
+            failed_pages = load_failed_pages()
+            if not failed_pages:
+                print("[SUCCESS] All failed pages successfully recovered! Scraping is 100% complete.")
+                break
+
+            target_page = failed_pages[0]
+            target_url = "https://zdraven-arhiv.com/doctors/" if target_page == 1 else f"https://zdraven-arhiv.com/doctors/?jsf=jet-engine&pagenum={target_page}"
+            print(f"  > [Phase 2 - Retry] Processing missed PAGE {target_page}...")
+
+            page_loaded = False
+            cards = []
+            
+            while not page_loaded:
+                if (time.time() - START_TIME) > TIME_LIMIT_SECONDS: break
+                
+                try:
+                    driver.get(target_url)
+                    
+                    if "404" in driver.title or "Страницата не е намерена" in driver.page_source:
+                         print(f"  [INFO] Page {target_page} is a 404. Removing from retry list.")
+                         page_loaded = True
+                         break
+
+                    WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.CLASS_NAME, "jet-listing-grid__item")))
+                    time.sleep(3)
+                    
+                    cards = driver.find_elements(By.XPATH, "//div[contains(@class, 'jet-listing-grid__item')]")
+                    if cards:
+                        page_loaded = True
+                        print(f"  [INFO] Recovered {len(cards)} doctors on missed page {target_page}.")
+                    else:
+                        raise Exception("Cards array empty")
+                        
+                except WebDriverException as we:
+                    if "crashed" in str(we).lower() or "disconnected" in str(we).lower() or "out of memory" in str(we).lower():
+                        print(f"  [CRITICAL] Chrome tab crashed! Rebooting WebDriver...")
+                        try: driver.quit()
+                        except: pass
+                        driver = create_driver()
+                        continue
+                    time.sleep(3)
+                except Exception:
                     time.sleep(3)
 
             if (time.time() - START_TIME) > TIME_LIMIT_SECONDS:
-                with open(CONTINUE_FLAG_FILE, 'w') as f:
-                    f.write("CONTINUE_REQUIRED")
-                timeout_reached = True
+                with open(CONTINUE_FLAG_FILE, 'w') as f: f.write("CONTINUE_REQUIRED")
                 break
                 
-            if end_of_records or not cards:
-                break
+            if cards:
+                doctors_on_page = []
+                for card in cards:
+                    try:
+                        link_el = card.find_element(By.CSS_SELECTOR, "a.jet-listing-dynamic-link__link")
+                        url = link_el.get_attribute("href")
+                        name = link_el.text.strip()
+                        if url: doctors_on_page.append({"Име": name, "URL": url, "Описание (Лист)": "-"})
+                    except: continue
 
-            doctors_on_page = []
-            for card in cards:
-                try:
-                    link_el = card.find_element(By.CSS_SELECTOR, "a.jet-listing-dynamic-link__link")
-                    url = link_el.get_attribute("href")
-                    name = link_el.text.strip()
-                    
-                    if not url: continue
-                    
-                    doc_data = {
-                        "Име": name,
-                        "URL": url,
-                        "Описание (Лист)": "-" 
-                    }
-                    doctors_on_page.append(doc_data)
-                except: continue
+                for doc in doctors_on_page:
+                    doc_url = doc['URL']
+                    if doc_url in parsed_urls: continue
+                    full_data = scrape_inner_profile(doc_url, doc)
+                    save_single_record(full_data)
+                    mark_as_parsed(doc_url)
 
-            for doc in doctors_on_page:
-                doc_url = doc['URL']
-                
-                if doc_url in parsed_urls:
-                    continue
-
-                full_data = scrape_inner_profile(doc_url, doc)
-                save_single_record(full_data)
-                mark_as_parsed(doc_url)
-
-            page += 1
-            save_state(page)
-
-        except WebDriverException as we:
-            error_msg = str(we).lower()
-            if "crashed" in error_msg or "disconnected" in error_msg or "out of memory" in error_msg:
-                print(f"  [CRITICAL] Chrome tab crashed during profile extraction! Rebooting WebDriver...")
-                try: driver.quit()
-                except: pass
-                time.sleep(3)
-                driver = create_driver()
-                continue
-            else:
-                print(f"[CRITICAL] Unexpected WebDriver error: {we}")
-                break
-
-        except Exception as e:
-            print(f"[CRITICAL] Page iteration failure on page {page}: {e}")
-            break
+            # Махаме страницата от черния списък, защото сме я обработили
+            failed_pages.pop(0)
+            save_failed_pages(failed_pages)
+            save_state(page=target_page, phase=2)
 
 except Exception as e:
     print(f"[CRITICAL] Global pipeline failure: {e}")
