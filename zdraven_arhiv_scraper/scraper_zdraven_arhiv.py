@@ -129,6 +129,7 @@ def save_single_record(record):
 
 def scrape_inner_profile(url, basic_info):
     try:
+        # Тук си ползваме оригиналния грозен линк, за да не крашва Selenium-а!
         driver.get(url)
         time.sleep(1.5) 
         
@@ -174,6 +175,7 @@ def scrape_inner_profile(url, basic_info):
         except: pass
 
         basic_info.update({
+            "URL": urllib.parse.unquote(url), # ТУК ДЕКОДИРАМЕ ЛИНКА В КРАСИВА КИРИЛИЦА ЗА CSV-ТО!
             "Телефони": ", ".join(phones) if phones else "-",
             "Email": ", ".join(emails) if emails else "-",
             "Адрес (Текст)": text_address,
@@ -230,7 +232,6 @@ try:
                 try:
                     driver.get(target_url)
                     
-                    # ПРОВЕРКА ЗА КРАЙ НА БАЗАТА - 404 ИЛИ JET ENGINE "NO DATA WAS FOUND"
                     if "404" in driver.title or "Страницата не е намерена" in driver.page_source or "No data was found" in driver.page_source:
                          print("  [INFO] End of database detected (No data was found). Phase 1 complete.")
                          page_loaded = True
@@ -244,7 +245,7 @@ try:
                     if cards:
                         page_loaded = True
                         print(f"  [INFO] Successfully loaded {len(cards)} doctors on page {page}.")
-                        consecutive_fails = 0 # Нулираме брояча, ако намерим доктори!
+                        consecutive_fails = 0
                     else:
                         raise Exception("Cards array empty")
                         
@@ -261,7 +262,6 @@ try:
                     retries += 1
                     time.sleep(2)
 
-                # Ако се счупи 3 пъти, я скипваме и увеличаваме брояча на поредните грешки!
                 if retries >= 3:
                     print(f"  [WARN] Page {page} is unresponsive (PHP OOM/Timeout). Skipping to next page (will retry in Phase 2).")
                     add_failed_page(page)
@@ -274,7 +274,6 @@ try:
                 with open(CONTINUE_FLAG_FILE, 'w') as f: f.write("CONTINUE_REQUIRED")
                 break
                 
-            # --- THE SIGMA KILL SWITCH ---
             if consecutive_fails >= 10:
                 print(f"[CRITICAL INFO] Hit {consecutive_fails} consecutive broken pages. Assuming end of database!")
                 end_of_records = True
@@ -291,12 +290,9 @@ try:
                 for card in cards:
                     try:
                         link_el = card.find_element(By.CSS_SELECTOR, "a.jet-listing-dynamic-link__link")
-                        raw_url = link_el.get_attribute("href")
+                        url = link_el.get_attribute("href") # Вземаме си грозния линк
                         name = link_el.text.strip()
-                        if raw_url: 
-                            # ДЕКОДИРАМЕ URL-а, ЗА ДА СЕ ЧЕТЕ НОРМАЛНО
-                            url = urllib.parse.unquote(raw_url)
-                            doctors_on_page.append({"Име": name, "URL": url, "Описание (Лист)": "-"})
+                        if url: doctors_on_page.append({"Име": name, "URL": url, "Описание (Лист)": "-"})
                     except: continue
 
                 for doc in doctors_on_page:
@@ -332,7 +328,6 @@ try:
                 try:
                     driver.get(target_url)
                     
-                    # ПРОВЕРКА ЗА КРАЙ НА БАЗАТА - 404 ИЛИ JET ENGINE "NO DATA WAS FOUND"
                     if "404" in driver.title or "Страницата не е намерена" in driver.page_source or "No data was found" in driver.page_source:
                          print(f"  [INFO] Page {target_page} has no data. Removing from retry list.")
                          page_loaded = True
@@ -368,12 +363,9 @@ try:
                 for card in cards:
                     try:
                         link_el = card.find_element(By.CSS_SELECTOR, "a.jet-listing-dynamic-link__link")
-                        raw_url = link_el.get_attribute("href")
+                        url = link_el.get_attribute("href") # Вземаме си грозния линк
                         name = link_el.text.strip()
-                        if raw_url: 
-                            # ДЕКОДИРАМЕ URL-а, ЗА ДА СЕ ЧЕТЕ НОРМАЛНО И ТУК
-                            url = urllib.parse.unquote(raw_url)
-                            doctors_on_page.append({"Име": name, "URL": url, "Описание (Лист)": "-"})
+                        if url: doctors_on_page.append({"Име": name, "URL": url, "Описание (Лист)": "-"})
                     except: continue
 
                 for doc in doctors_on_page:
@@ -383,7 +375,6 @@ try:
                     save_single_record(full_data)
                     mark_as_parsed(doc_url)
 
-            # Махаме страницата от черния списък, защото сме я обработили или е празна
             failed_pages.pop(0)
             save_failed_pages(failed_pages)
             save_state(page=target_page, phase=2)
