@@ -291,9 +291,12 @@ try:
                 for card in cards:
                     try:
                         link_el = card.find_element(By.CSS_SELECTOR, "a.jet-listing-dynamic-link__link")
-                        url = link_el.get_attribute("href")
+                        raw_url = link_el.get_attribute("href")
                         name = link_el.text.strip()
-                        if url: doctors_on_page.append({"Име": name, "URL": url, "Описание (Лист)": "-"})
+                        if raw_url: 
+                            # ДЕКОДИРАМЕ URL-а, ЗА ДА СЕ ЧЕТЕ НОРМАЛНО
+                            url = urllib.parse.unquote(raw_url)
+                            doctors_on_page.append({"Име": name, "URL": url, "Описание (Лист)": "-"})
                     except: continue
 
                 for doc in doctors_on_page:
@@ -365,9 +368,12 @@ try:
                 for card in cards:
                     try:
                         link_el = card.find_element(By.CSS_SELECTOR, "a.jet-listing-dynamic-link__link")
-                        url = link_el.get_attribute("href")
+                        raw_url = link_el.get_attribute("href")
                         name = link_el.text.strip()
-                        if url: doctors_on_page.append({"Име": name, "URL": url, "Описание (Лист)": "-"})
+                        if raw_url: 
+                            # ДЕКОДИРАМЕ URL-а, ЗА ДА СЕ ЧЕТЕ НОРМАЛНО И ТУК
+                            url = urllib.parse.unquote(raw_url)
+                            doctors_on_page.append({"Име": name, "URL": url, "Описание (Лист)": "-"})
                     except: continue
 
                 for doc in doctors_on_page:
