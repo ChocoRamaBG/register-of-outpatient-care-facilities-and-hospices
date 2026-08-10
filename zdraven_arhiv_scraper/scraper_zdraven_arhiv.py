@@ -34,19 +34,19 @@ current_batch_filename = os.path.join(output_dir, "zdraven_arhiv_data_mega.csv")
 CONTINUE_FLAG_FILE = os.path.join(output_dir, "CONTINUE_FLAG_ZDRAVEN_ARHIV")
 
 # --- STATE AND MEMORY MANAGEMENT ---
-state = {"page": 1, "phase": 1}
+state = {"page": 1, "phase": 1, "consecutive_fails": 0} # ДОБАВЕН KILL SWITCH БРОЯЧ
 if os.path.exists(state_file):
     try:
         with open(state_file, "r") as f:
             state = json.load(f)
-            print(f"[INFO] Resuming execution from Phase {state.get('phase', 1)}, Page {state['page']}.")
+            print(f"[INFO] Resuming execution from Phase {state.get('phase', 1)}, Page {state.get('page', 1)}.")
     except Exception:
         print("[WARN] Corrupted state file detected. Initializing new state.")
-        state = {"page": 1, "phase": 1}
+        state = {"page": 1, "phase": 1, "consecutive_fails": 0}
 
-def save_state(page, phase=1):
+def save_state(page, phase=1, consecutive_fails=0):
     with open(state_file, "w") as f:
-        json.dump({"page": page, "phase": phase}, f)
+        json.dump({"page": page, "phase": phase, "consecutive_fails": consecutive_fails}, f)
 
 parsed_urls = set()
 if os.path.exists(memory_file):
@@ -199,7 +199,9 @@ if os.path.exists(CONTINUE_FLAG_FILE):
     os.remove(CONTINUE_FLAG_FILE)
 
 current_phase = state.get("phase", 1)
-page = state["page"]
+page = state.get("page", 1)
+consecutive_fails = state.get("consecutive_fails", 0)
+
 print(f"[INFO] Initializing sequence starting at Phase {current_phase}, Page {page}.")
 
 try:
@@ -240,6 +242,7 @@ try:
                     if cards:
                         page_loaded = True
                         print(f"  [INFO] Successfully loaded {len(cards)} doctors on page {page}.")
+                        consecutive_fails = 0 # Нулираме брояча, ако намерим доктори!
                     else:
                         raise Exception("Cards array empty")
                         
@@ -256,21 +259,29 @@ try:
                     retries += 1
                     time.sleep(2)
 
-                # ТУК Е МАГИЯТА ЗА ФАЗА 1: Ако се счупи 3 пъти, я скипваме!
+                # Ако се счупи 3 пъти, я скипваме и увеличаваме брояча на поредните грешки!
                 if retries >= 3:
                     print(f"  [WARN] Page {page} is unresponsive (PHP OOM/Timeout). Skipping to next page (will retry in Phase 2).")
                     add_failed_page(page)
+                    consecutive_fails += 1
                     page_loaded = True
                     break
 
             if (time.time() - START_TIME) > TIME_LIMIT_SECONDS:
+                save_state(page, phase=1, consecutive_fails=consecutive_fails)
                 with open(CONTINUE_FLAG_FILE, 'w') as f: f.write("CONTINUE_REQUIRED")
                 break
                 
+            # --- THE SIGMA KILL SWITCH ---
+            if consecutive_fails >= 10:
+                print(f"[CRITICAL INFO] Hit {consecutive_fails} consecutive empty/broken pages. Assuming end of database!")
+                end_of_records = True
+
             if end_of_records:
                 print("[INFO] Phase 1 finished! Transitioning to Phase 2 (Retry failed pages)...")
                 current_phase = 2
-                save_state(page=1, phase=2)
+                consecutive_fails = 0
+                save_state(page=1, phase=2, consecutive_fails=0)
                 continue
 
             if cards:
@@ -291,7 +302,7 @@ try:
                     mark_as_parsed(doc_url)
 
             page += 1
-            save_state(page, phase=1)
+            save_state(page, phase=1, consecutive_fails=consecutive_fails)
 
         # ==========================================
         # PHASE 2: БЕЗКРАЕН ТЕРОР (Счупените страници)
@@ -303,6 +314,11 @@ try:
                 break
 
             target_page = failed_pages[0]
+            
+            # Ако сме маркирали като грешни ония страници отвъд лимита (напр. 4800+), ги изчистваме!
+            # За целта проверяваме дали target_page не е абсурдно голям номер (над последната успешна страница).
+            # Засега просто ще го оставим да ги пробва по веднъж и ако върнат 404, ще ги махне.
+            
             target_url = "https://zdraven-arhiv.com/doctors/" if target_page == 1 else f"https://zdraven-arhiv.com/doctors/?jsf=jet-engine&pagenum={target_page}"
             print(f"  > [Phase 2 - Retry] Processing missed PAGE {target_page}...")
 
