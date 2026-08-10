@@ -34,7 +34,7 @@ current_batch_filename = os.path.join(output_dir, "zdraven_arhiv_data_mega.csv")
 CONTINUE_FLAG_FILE = os.path.join(output_dir, "CONTINUE_FLAG_ZDRAVEN_ARHIV")
 
 # --- STATE AND MEMORY MANAGEMENT ---
-state = {"page": 1, "phase": 1, "consecutive_fails": 0} # ДОБАВЕН KILL SWITCH БРОЯЧ
+state = {"page": 1, "phase": 1, "consecutive_fails": 0}
 if os.path.exists(state_file):
     try:
         with open(state_file, "r") as f:
@@ -229,8 +229,10 @@ try:
                 
                 try:
                     driver.get(target_url)
-                    if "404" in driver.title or "Страницата не е намерена" in driver.page_source:
-                         print("  [INFO] 404 Not Found. Phase 1 complete.")
+                    
+                    # ПРОВЕРКА ЗА КРАЙ НА БАЗАТА - 404 ИЛИ JET ENGINE "NO DATA WAS FOUND"
+                    if "404" in driver.title or "Страницата не е намерена" in driver.page_source or "No data was found" in driver.page_source:
+                         print("  [INFO] End of database detected (No data was found). Phase 1 complete.")
                          page_loaded = True
                          end_of_records = True
                          break
@@ -274,7 +276,7 @@ try:
                 
             # --- THE SIGMA KILL SWITCH ---
             if consecutive_fails >= 10:
-                print(f"[CRITICAL INFO] Hit {consecutive_fails} consecutive empty/broken pages. Assuming end of database!")
+                print(f"[CRITICAL INFO] Hit {consecutive_fails} consecutive broken pages. Assuming end of database!")
                 end_of_records = True
 
             if end_of_records:
@@ -315,10 +317,6 @@ try:
 
             target_page = failed_pages[0]
             
-            # Ако сме маркирали като грешни ония страници отвъд лимита (напр. 4800+), ги изчистваме!
-            # За целта проверяваме дали target_page не е абсурдно голям номер (над последната успешна страница).
-            # Засега просто ще го оставим да ги пробва по веднъж и ако върнат 404, ще ги махне.
-            
             target_url = "https://zdraven-arhiv.com/doctors/" if target_page == 1 else f"https://zdraven-arhiv.com/doctors/?jsf=jet-engine&pagenum={target_page}"
             print(f"  > [Phase 2 - Retry] Processing missed PAGE {target_page}...")
 
@@ -331,8 +329,9 @@ try:
                 try:
                     driver.get(target_url)
                     
-                    if "404" in driver.title or "Страницата не е намерена" in driver.page_source:
-                         print(f"  [INFO] Page {target_page} is a 404. Removing from retry list.")
+                    # ПРОВЕРКА ЗА КРАЙ НА БАЗАТА - 404 ИЛИ JET ENGINE "NO DATA WAS FOUND"
+                    if "404" in driver.title or "Страницата не е намерена" in driver.page_source or "No data was found" in driver.page_source:
+                         print(f"  [INFO] Page {target_page} has no data. Removing from retry list.")
                          page_loaded = True
                          break
 
@@ -378,7 +377,7 @@ try:
                     save_single_record(full_data)
                     mark_as_parsed(doc_url)
 
-            # Махаме страницата от черния списък, защото сме я обработили
+            # Махаме страницата от черния списък, защото сме я обработили или е празна
             failed_pages.pop(0)
             save_failed_pages(failed_pages)
             save_state(page=target_page, phase=2)
