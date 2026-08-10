@@ -129,7 +129,6 @@ def save_single_record(record):
 
 def scrape_inner_profile(url, basic_info):
     try:
-        # Тук си ползваме оригиналния грозен линк, за да не крашва Selenium-а!
         driver.get(url)
         time.sleep(1.5) 
         
@@ -175,7 +174,7 @@ def scrape_inner_profile(url, basic_info):
         except: pass
 
         basic_info.update({
-            "URL": urllib.parse.unquote(url), # ТУК ДЕКОДИРАМЕ ЛИНКА В КРАСИВА КИРИЛИЦА ЗА CSV-ТО!
+            "URL": urllib.parse.unquote(url),
             "Телефони": ", ".join(phones) if phones else "-",
             "Email": ", ".join(emails) if emails else "-",
             "Адрес (Текст)": text_address,
@@ -232,15 +231,27 @@ try:
                 try:
                     driver.get(target_url)
                     
-                    if "404" in driver.title or "Страницата не е намерена" in driver.page_source or "No data was found" in driver.page_source:
+                    if "404" in driver.title or "Страницата не е намерена" in driver.page_source:
+                         print("  [INFO] 404 Not Found. Phase 1 complete.")
+                         page_loaded = True
+                         end_of_records = True
+                         break
+
+                    # МАГИЯТА: Чакаме да се появят ИЛИ карти с лекари, ИЛИ видим надпис "No data was found"
+                    WebDriverWait(driver, 15).until(
+                        lambda d: d.find_elements(By.CLASS_NAME, "jet-listing-grid__item") or \
+                                  [el for el in d.find_elements(By.CLASS_NAME, "jet-listing-not-found") if el.is_displayed()]
+                    )
+                    time.sleep(2)
+                    
+                    # Проверяваме кое от двете се е заредило
+                    not_found_els = [el for el in driver.find_elements(By.CLASS_NAME, "jet-listing-not-found") if el.is_displayed()]
+                    if not_found_els:
                          print("  [INFO] End of database detected (No data was found). Phase 1 complete.")
                          page_loaded = True
                          end_of_records = True
                          break
 
-                    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, "jet-listing-grid__item")))
-                    time.sleep(2)
-                    
                     cards = driver.find_elements(By.XPATH, "//div[contains(@class, 'jet-listing-grid__item')]")
                     if cards:
                         page_loaded = True
@@ -290,7 +301,7 @@ try:
                 for card in cards:
                     try:
                         link_el = card.find_element(By.CSS_SELECTOR, "a.jet-listing-dynamic-link__link")
-                        url = link_el.get_attribute("href") # Вземаме си грозния линк
+                        url = link_el.get_attribute("href")
                         name = link_el.text.strip()
                         if url: doctors_on_page.append({"Име": name, "URL": url, "Описание (Лист)": "-"})
                     except: continue
@@ -328,14 +339,23 @@ try:
                 try:
                     driver.get(target_url)
                     
-                    if "404" in driver.title or "Страницата не е намерена" in driver.page_source or "No data was found" in driver.page_source:
+                    if "404" in driver.title or "Страницата не е намерена" in driver.page_source:
+                         print(f"  [INFO] Page {target_page} is a 404. Removing from retry list.")
+                         page_loaded = True
+                         break
+
+                    WebDriverWait(driver, 15).until(
+                        lambda d: d.find_elements(By.CLASS_NAME, "jet-listing-grid__item") or \
+                                  [el for el in d.find_elements(By.CLASS_NAME, "jet-listing-not-found") if el.is_displayed()]
+                    )
+                    time.sleep(3)
+                    
+                    not_found_els = [el for el in driver.find_elements(By.CLASS_NAME, "jet-listing-not-found") if el.is_displayed()]
+                    if not_found_els:
                          print(f"  [INFO] Page {target_page} has no data. Removing from retry list.")
                          page_loaded = True
                          break
 
-                    WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.CLASS_NAME, "jet-listing-grid__item")))
-                    time.sleep(3)
-                    
                     cards = driver.find_elements(By.XPATH, "//div[contains(@class, 'jet-listing-grid__item')]")
                     if cards:
                         page_loaded = True
@@ -363,7 +383,7 @@ try:
                 for card in cards:
                     try:
                         link_el = card.find_element(By.CSS_SELECTOR, "a.jet-listing-dynamic-link__link")
-                        url = link_el.get_attribute("href") # Вземаме си грозния линк
+                        url = link_el.get_attribute("href")
                         name = link_el.text.strip()
                         if url: doctors_on_page.append({"Име": name, "URL": url, "Описание (Лист)": "-"})
                     except: continue
