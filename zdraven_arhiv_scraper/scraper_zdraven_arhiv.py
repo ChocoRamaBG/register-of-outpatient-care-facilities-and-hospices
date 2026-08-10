@@ -231,32 +231,33 @@ try:
                 try:
                     driver.get(target_url)
                     
+                    # ПЪРВО: Твърдо изчакване от 4 секунди за мазния AJAX да зареди каквото има!
+                    time.sleep(4)
+                    
+                    # Проверка за чиста 404 грешка
                     if "404" in driver.title or "Страницата не е намерена" in driver.page_source:
                          print("  [INFO] 404 Not Found. Phase 1 complete.")
                          page_loaded = True
                          end_of_records = True
                          break
 
-                    # МАГИЯТА: Чакаме да се появят ИЛИ карти с лекари, ИЛИ видим надпис "No data was found"
-                    WebDriverWait(driver, 15).until(
-                        lambda d: d.find_elements(By.CLASS_NAME, "jet-listing-grid__item") or \
-                                  [el for el in d.find_elements(By.CLASS_NAME, "jet-listing-not-found") if el.is_displayed()]
-                    )
-                    time.sleep(2)
-                    
-                    # Проверяваме кое от двете се е заредило
-                    not_found_els = [el for el in driver.find_elements(By.CLASS_NAME, "jet-listing-not-found") if el.is_displayed()]
-                    if not_found_els:
+                    # Проверка за "No data was found" чрез самия елемент, СЛЕД като AJAX е приключил
+                    not_found_els = driver.find_elements(By.CLASS_NAME, "jet-listing-not-found")
+                    if not_found_els and not_found_els[0].is_displayed() and "No data was found" in not_found_els[0].text:
                          print("  [INFO] End of database detected (No data was found). Phase 1 complete.")
                          page_loaded = True
                          end_of_records = True
                          break
 
+                    # Ако сме стигнали дотук, чакаме да се появят докторите
+                    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, "jet-listing-grid__item")))
+                    time.sleep(2)
+                    
                     cards = driver.find_elements(By.XPATH, "//div[contains(@class, 'jet-listing-grid__item')]")
                     if cards:
                         page_loaded = True
                         print(f"  [INFO] Successfully loaded {len(cards)} doctors on page {page}.")
-                        consecutive_fails = 0
+                        consecutive_fails = 0 
                     else:
                         raise Exception("Cards array empty")
                         
@@ -338,24 +339,22 @@ try:
                 
                 try:
                     driver.get(target_url)
+                    time.sleep(4)
                     
                     if "404" in driver.title or "Страницата не е намерена" in driver.page_source:
                          print(f"  [INFO] Page {target_page} is a 404. Removing from retry list.")
                          page_loaded = True
                          break
 
-                    WebDriverWait(driver, 15).until(
-                        lambda d: d.find_elements(By.CLASS_NAME, "jet-listing-grid__item") or \
-                                  [el for el in d.find_elements(By.CLASS_NAME, "jet-listing-not-found") if el.is_displayed()]
-                    )
-                    time.sleep(3)
-                    
-                    not_found_els = [el for el in driver.find_elements(By.CLASS_NAME, "jet-listing-not-found") if el.is_displayed()]
-                    if not_found_els:
+                    not_found_els = driver.find_elements(By.CLASS_NAME, "jet-listing-not-found")
+                    if not_found_els and not_found_els[0].is_displayed() and "No data was found" in not_found_els[0].text:
                          print(f"  [INFO] Page {target_page} has no data. Removing from retry list.")
                          page_loaded = True
                          break
 
+                    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, "jet-listing-grid__item")))
+                    time.sleep(2)
+                    
                     cards = driver.find_elements(By.XPATH, "//div[contains(@class, 'jet-listing-grid__item')]")
                     if cards:
                         page_loaded = True
