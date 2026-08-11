@@ -53,13 +53,17 @@ if os.path.exists(memory_file):
     with open(memory_file, "r", encoding="utf-8") as f:
         for line in f:
             url = line.strip()
-            if url: parsed_urls.add(url)
+            if url: 
+                # Добавяме и декодирания, и суровия вариант, за да сме сигурни
+                parsed_urls.add(urllib.parse.unquote(url))
+                parsed_urls.add(url)
 print(f"[INFO] Initialized memory cache with {len(parsed_urls)} processed URLs.")
 
 def mark_as_parsed(url):
-    parsed_urls.add(url)
+    decoded_url = urllib.parse.unquote(url)
+    parsed_urls.add(decoded_url)
     with open(memory_file, "a", encoding="utf-8") as f:
-        f.write(url + "\n")
+        f.write(decoded_url + "\n")
 
 # --- FAILED PAGES MANAGEMENT ---
 def load_failed_pages():
@@ -174,7 +178,6 @@ def scrape_inner_profile(url, basic_info):
         except: pass
 
         basic_info.update({
-            "URL": urllib.parse.unquote(url),
             "Телефони": ", ".join(phones) if phones else "-",
             "Email": ", ".join(emails) if emails else "-",
             "Адрес (Текст)": text_address,
@@ -234,14 +237,12 @@ try:
                     # ПЪРВО: Твърдо изчакване от 4 секунди за мазния AJAX да зареди каквото има!
                     time.sleep(4)
                     
-                    # Проверка за чиста 404 грешка
                     if "404" in driver.title or "Страницата не е намерена" in driver.page_source:
                          print("  [INFO] 404 Not Found. Phase 1 complete.")
                          page_loaded = True
                          end_of_records = True
                          break
 
-                    # Проверка за "No data was found" чрез самия елемент, СЛЕД като AJAX е приключил
                     not_found_els = driver.find_elements(By.CLASS_NAME, "jet-listing-not-found")
                     if not_found_els and not_found_els[0].is_displayed() and "No data was found" in not_found_els[0].text:
                          print("  [INFO] End of database detected (No data was found). Phase 1 complete.")
@@ -249,7 +250,6 @@ try:
                          end_of_records = True
                          break
 
-                    # Ако сме стигнали дотук, чакаме да се появят докторите
                     WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, "jet-listing-grid__item")))
                     time.sleep(2)
                     
@@ -302,17 +302,37 @@ try:
                 for card in cards:
                     try:
                         link_el = card.find_element(By.CSS_SELECTOR, "a.jet-listing-dynamic-link__link")
-                        url = link_el.get_attribute("href")
+                        raw_url = link_el.get_attribute("href")
                         name = link_el.text.strip()
-                        if url: doctors_on_page.append({"Име": name, "URL": url, "Описание (Лист)": "-"})
+                        if raw_url:
+                            decoded_url = urllib.parse.unquote(raw_url)
+                            doctors_on_page.append({
+                                "Име": name, 
+                                "RAW_URL": raw_url, 
+                                "URL": decoded_url, # Декодирано за CSV-то
+                                "Описание (Лист)": "-"
+                            })
                     except: continue
 
                 for doc in doctors_on_page:
-                    doc_url = doc['URL']
-                    if doc_url in parsed_urls: continue
-                    full_data = scrape_inner_profile(doc_url, doc)
-                    save_single_record(full_data)
-                    mark_as_parsed(doc_url)
+                    raw_url = doc.pop('RAW_URL') # Вадим суровия линк за браузъра
+                    decoded_url = doc['URL']
+                    
+                    if decoded_url in parsed_urls or raw_url in parsed_urls:
+                        continue
+                        
+                    # ТУК ЛОВИМ КРАШОВЕТЕ ВЪТРЕ В ПРОФИЛИТЕ
+                    try:
+                        full_data = scrape_inner_profile(raw_url, doc)
+                        save_single_record(full_data)
+                        mark_as_parsed(decoded_url)
+                    except WebDriverException as we:
+                        if "crashed" in str(we).lower() or "disconnected" in str(we).lower() or "out of memory" in str(we).lower():
+                            print(f"  [CRITICAL] Chrome crashed inside profile {decoded_url}! Rebooting WebDriver and skipping for now...")
+                            try: driver.quit()
+                            except: pass
+                            driver = create_driver()
+                            continue # Отиваме на следващия доктор, ТОЗИ НЕ ГО ЗАПИСВАМЕ КАТО ПРЕМИНАТ
 
             page += 1
             save_state(page, phase=1, consecutive_fails=consecutive_fails)
@@ -382,17 +402,37 @@ try:
                 for card in cards:
                     try:
                         link_el = card.find_element(By.CSS_SELECTOR, "a.jet-listing-dynamic-link__link")
-                        url = link_el.get_attribute("href")
+                        raw_url = link_el.get_attribute("href")
                         name = link_el.text.strip()
-                        if url: doctors_on_page.append({"Име": name, "URL": url, "Описание (Лист)": "-"})
+                        if raw_url:
+                            decoded_url = urllib.parse.unquote(raw_url)
+                            doctors_on_page.append({
+                                "Име": name, 
+                                "RAW_URL": raw_url, 
+                                "URL": decoded_url, 
+                                "Описание (Лист)": "-"
+                            })
                     except: continue
 
                 for doc in doctors_on_page:
-                    doc_url = doc['URL']
-                    if doc_url in parsed_urls: continue
-                    full_data = scrape_inner_profile(doc_url, doc)
-                    save_single_record(full_data)
-                    mark_as_parsed(doc_url)
+                    raw_url = doc.pop('RAW_URL')
+                    decoded_url = doc['URL']
+                    
+                    if decoded_url in parsed_urls or raw_url in parsed_urls:
+                        continue
+                        
+                    # СЪЩАТА ЗАЩИТА СРЕЩУ КРАШ И ТУК
+                    try:
+                        full_data = scrape_inner_profile(raw_url, doc)
+                        save_single_record(full_data)
+                        mark_as_parsed(decoded_url)
+                    except WebDriverException as we:
+                        if "crashed" in str(we).lower() or "disconnected" in str(we).lower() or "out of memory" in str(we).lower():
+                            print(f"  [CRITICAL] Chrome crashed inside profile {decoded_url}! Rebooting WebDriver and skipping for now...")
+                            try: driver.quit()
+                            except: pass
+                            driver = create_driver()
+                            continue
 
             failed_pages.pop(0)
             save_failed_pages(failed_pages)
