@@ -17,7 +17,6 @@ from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import (
     WebDriverException,
     TimeoutException,
-    NoSuchElementException,
     StaleElementReferenceException,
 )
 
@@ -28,36 +27,25 @@ from selenium.common.exceptions import (
 
 START_TIME = time.time()
 
-# Keep your original ~5.4 hour execution limit
+# Same time limit as your previous scraper
 TIME_LIMIT_SECONDS = 5.4 * 60 * 60
 
 BASE_URL = "https://zdraven-arhiv.com/doctors/"
 
-# How long we allow a page to dynamically populate
-PAGE_MAX_WAIT_SECONDS = 25
+# Old scraper proved these wait times work well.
+PAGE1_WAIT_SECONDS = 10
+OTHER_PAGE_WAIT_SECONDS = 5
 
-# Number of seconds the card count must remain unchanged
-# before we consider the listing stable.
-PAGE_STABLE_SECONDS = 3.0
+# Profile wait
+PROFILE_WAIT_SECONDS = 5
+PROFILE_INITIAL_SLEEP = 1.5
 
-# Small polling interval while waiting for cards
-PAGE_POLL_INTERVAL = 0.5
-
-# Number of complete page-loading attempts
-MAX_PAGE_LOAD_RETRIES = 4
-
-# Number of profile scraping attempts
+# Retries
+MAX_PAGE_RETRIES = 3
 MAX_PROFILE_RETRIES = 3
 
-# Give the profile a little time after navigation
-PROFILE_INITIAL_WAIT = 1.5
-
-# Delay before retrying problematic pages/profiles
+# Small delay between retries
 RETRY_DELAY_SECONDS = 2
-
-# How many pages to keep trying after a suspicious failure
-# before moving to phase 2.
-MAX_CONSECUTIVE_PAGE_FAILURES = 5
 
 
 # ============================================================
@@ -69,8 +57,15 @@ try:
 except NameError:
     base_dir = os.getcwd()
 
-output_dir = os.path.join(base_dir, "zdraven_arhiv_outputs")
-os.makedirs(output_dir, exist_ok=True)
+output_dir = os.path.join(
+    base_dir,
+    "zdraven_arhiv_outputs"
+)
+
+os.makedirs(
+    output_dir,
+    exist_ok=True
+)
 
 state_file = os.path.join(
     output_dir,
@@ -109,7 +104,7 @@ CONTINUE_FLAG_FILE = os.path.join(
 
 
 # ============================================================
-# DATA SCHEMA
+# OUTPUT SCHEMA
 # ============================================================
 
 fieldnames = [
@@ -129,33 +124,36 @@ fieldnames = [
 
 
 # ============================================================
-# TIME LIMIT HELPERS
+# TIME HELPERS
 # ============================================================
 
 def time_limit_reached():
-    return (time.time() - START_TIME) >= TIME_LIMIT_SECONDS
-
-
-def remaining_time_seconds():
-    return max(
-        0,
-        TIME_LIMIT_SECONDS - (time.time() - START_TIME)
-    )
+    return (
+        time.time() - START_TIME
+    ) >= TIME_LIMIT_SECONDS
 
 
 # ============================================================
-# STATE MANAGEMENT
+# STATE
 # ============================================================
 
 state = {
     "page": 1,
     "phase": 1,
-    "consecutive_fails": 0,
+    "consecutive_fails": 0
 }
 
+
 if os.path.exists(state_file):
+
     try:
-        with open(state_file, "r", encoding="utf-8") as f:
+
+        with open(
+            state_file,
+            "r",
+            encoding="utf-8"
+        ) as f:
+
             state = json.load(f)
 
         print(
@@ -165,23 +163,23 @@ if os.path.exists(state_file):
         )
 
     except Exception as e:
+
         print(
-            f"[WARN] Could not load state file: {e}"
+            f"[WARN] State file could not be loaded: {e}"
         )
 
         state = {
             "page": 1,
             "phase": 1,
-            "consecutive_fails": 0,
+            "consecutive_fails": 0
         }
 
 
 def save_state(
     page,
     phase=1,
-    consecutive_fails=0,
+    consecutive_fails=0
 ):
-    temp_file = state_file + ".tmp"
 
     payload = {
         "page": page,
@@ -189,27 +187,35 @@ def save_state(
         "consecutive_fails": consecutive_fails,
         "saved_at": datetime.now().strftime(
             "%Y-%m-%d %H:%M:%S"
-        ),
+        )
     }
 
+    temp_file = state_file + ".tmp"
+
     try:
+
         with open(
             temp_file,
             "w",
             encoding="utf-8"
         ) as f:
+
             json.dump(
                 payload,
                 f,
                 ensure_ascii=False,
-                indent=2,
+                indent=2
             )
 
-        os.replace(temp_file, state_file)
+        os.replace(
+            temp_file,
+            state_file
+        )
 
     except Exception as e:
+
         print(
-            f"[ERROR] Failed to save state: {e}"
+            f"[ERROR] Could not save state: {e}"
         )
 
 
@@ -219,8 +225,11 @@ def save_state(
 
 parsed_urls = set()
 
+
 if os.path.exists(memory_file):
+
     try:
+
         with open(
             memory_file,
             "r",
@@ -228,148 +237,75 @@ if os.path.exists(memory_file):
         ) as f:
 
             for line in f:
+
                 url = line.strip()
 
                 if not url:
                     continue
 
-                decoded = urllib.parse.unquote(url)
+                parsed_urls.add(
+                    urllib.parse.unquote(url)
+                )
 
-                parsed_urls.add(decoded)
                 parsed_urls.add(url)
 
     except Exception as e:
+
         print(
             f"[WARN] Could not load parsed URL memory: {e}"
         )
 
 
 print(
-    f"[INFO] Loaded {len(parsed_urls)} URL cache entries."
+    f"[INFO] Loaded "
+    f"{len(parsed_urls)} cached URLs."
 )
 
 
 def normalize_url(url):
+
     if not url:
         return ""
 
     url = url.strip()
 
-    decoded = urllib.parse.unquote(url)
-
-    # Remove fragment
-    decoded = decoded.split("#", 1)[0]
-
-    # Remove trailing slash for consistency
-    if decoded.endswith("/") and decoded != BASE_URL:
-        decoded = decoded.rstrip("/")
-
-    return decoded
+    return urllib.parse.unquote(url)
 
 
-def is_already_parsed(raw_url):
-    decoded = normalize_url(raw_url)
+def is_already_parsed(url):
+
+    decoded = normalize_url(url)
 
     return (
         decoded in parsed_urls
-        or raw_url in parsed_urls
+        or url in parsed_urls
     )
 
 
-def mark_as_parsed(raw_url):
-    decoded_url = normalize_url(raw_url)
+def mark_as_parsed(url):
 
-    parsed_urls.add(decoded_url)
-    parsed_urls.add(raw_url)
+    decoded = normalize_url(url)
+
+    parsed_urls.add(decoded)
+    parsed_urls.add(url)
 
     try:
+
         with open(
             memory_file,
             "a",
             encoding="utf-8"
         ) as f:
-            f.write(decoded_url + "\n")
 
-    except Exception as e:
-        print(
-            f"[ERROR] Failed to write parsed URL: {e}"
-        )
-
-
-# ============================================================
-# FAILED PROFILE MANAGEMENT
-# ============================================================
-
-def load_failed_profiles():
-    if not os.path.exists(failed_profiles_file):
-        return []
-
-    try:
-        with open(
-            failed_profiles_file,
-            "r",
-            encoding="utf-8"
-        ) as f:
-            data = json.load(f)
-
-        if not isinstance(data, list):
-            return []
-
-        return data
-
-    except Exception:
-        return []
-
-
-def save_failed_profiles(profiles):
-    try:
-        with open(
-            failed_profiles_file,
-            "w",
-            encoding="utf-8"
-        ) as f:
-            json.dump(
-                profiles,
-                f,
-                ensure_ascii=False,
-                indent=2,
+            f.write(
+                decoded + "\n"
             )
 
     except Exception as e:
+
         print(
-            f"[ERROR] Failed to save failed profiles: {e}"
+            f"[ERROR] Could not save parsed URL: {e}"
         )
-
-
-def add_failed_profile(
-    name,
-    raw_url,
-    page,
-    reason=""
-):
-    profiles = load_failed_profiles()
-
-    normalized = normalize_url(raw_url)
-
-    for existing in profiles:
-        if normalize_url(
-            existing.get("URL", "")
-        ) == normalized:
-            return
-
-    profiles.append(
-        {
-            "Име": name,
-            "URL": normalized,
-            "Page": page,
-            "Reason": reason,
-            "Timestamp": datetime.now().strftime(
-                "%Y-%m-%d %H:%M:%S"
-            ),
-        }
-    )
-
-    save_failed_profiles(profiles)
 
 
 # ============================================================
@@ -377,15 +313,20 @@ def add_failed_profile(
 # ============================================================
 
 def load_failed_pages():
-    if not os.path.exists(failed_pages_file):
+
+    if not os.path.exists(
+        failed_pages_file
+    ):
         return []
 
     try:
+
         with open(
             failed_pages_file,
             "r",
             encoding="utf-8"
         ) as f:
+
             data = json.load(f)
 
         if not isinstance(data, list):
@@ -400,79 +341,192 @@ def load_failed_pages():
         )
 
     except Exception:
+
         return []
 
 
 def save_failed_pages(pages):
+
     try:
-        pages = sorted(set(int(x) for x in pages))
+
+        pages = sorted(
+            set(
+                int(x)
+                for x in pages
+            )
+        )
 
         with open(
             failed_pages_file,
             "w",
             encoding="utf-8"
         ) as f:
+
             json.dump(
                 pages,
                 f,
                 ensure_ascii=False,
-                indent=2,
+                indent=2
             )
 
     except Exception as e:
+
         print(
-            f"[ERROR] Failed to save failed pages: {e}"
+            f"[ERROR] Could not save failed pages: {e}"
         )
 
 
-def add_failed_page(page_num):
+def add_failed_page(page):
+
     pages = load_failed_pages()
 
-    page_num = int(page_num)
-
-    if page_num not in pages:
-        pages.append(page_num)
+    if page not in pages:
+        pages.append(page)
 
     save_failed_pages(pages)
 
 
-def remove_failed_page(page_num):
+def remove_failed_page(page):
+
     pages = load_failed_pages()
 
-    if page_num in pages:
-        pages.remove(page_num)
+    if page in pages:
+        pages.remove(page)
 
     save_failed_pages(pages)
 
 
 # ============================================================
-# PAGE DISCOVERY MEMORY
+# FAILED PROFILE MANAGEMENT
+# ============================================================
+
+def load_failed_profiles():
+
+    if not os.path.exists(
+        failed_profiles_file
+    ):
+        return []
+
+    try:
+
+        with open(
+            failed_profiles_file,
+            "r",
+            encoding="utf-8"
+        ) as f:
+
+            data = json.load(f)
+
+        if isinstance(data, list):
+            return data
+
+    except Exception:
+        pass
+
+    return []
+
+
+def save_failed_profiles(profiles):
+
+    try:
+
+        with open(
+            failed_profiles_file,
+            "w",
+            encoding="utf-8"
+        ) as f:
+
+            json.dump(
+                profiles,
+                f,
+                ensure_ascii=False,
+                indent=2
+            )
+
+    except Exception as e:
+
+        print(
+            f"[ERROR] Could not save failed profiles: {e}"
+        )
+
+
+def add_failed_profile(
+    name,
+    url,
+    page,
+    reason=""
+):
+
+    profiles = load_failed_profiles()
+
+    decoded_url = normalize_url(url)
+
+    for existing in profiles:
+
+        if normalize_url(
+            existing.get("URL", "")
+        ) == decoded_url:
+
+            return
+
+    profiles.append(
+        {
+            "Име": name,
+            "URL": decoded_url,
+            "Page": page,
+            "Reason": reason,
+            "Timestamp": datetime.now().strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+        }
+    )
+
+    save_failed_profiles(profiles)
+
+
+# ============================================================
+# PAGE DISCOVERY LOG
 # ============================================================
 
 def load_page_discovered_urls():
-    if not os.path.exists(page_discovered_urls_file):
+
+    if not os.path.exists(
+        page_discovered_urls_file
+    ):
         return {}
 
     try:
+
         with open(
             page_discovered_urls_file,
             "r",
             encoding="utf-8"
         ) as f:
+
             data = json.load(f)
 
-        return data if isinstance(data, dict) else {}
+        if isinstance(data, dict):
+            return data
 
     except Exception:
-        return {}
+        pass
+
+    return {}
 
 
-page_discovered_urls = load_page_discovered_urls()
+page_discovered_urls = (
+    load_page_discovered_urls()
+)
 
 
 def save_page_discovered_urls():
+
     try:
-        temp_file = page_discovered_urls_file + ".tmp"
+
+        temp_file = (
+            page_discovered_urls_file
+            + ".tmp"
+        )
 
         with open(
             temp_file,
@@ -484,7 +538,7 @@ def save_page_discovered_urls():
                 page_discovered_urls,
                 f,
                 ensure_ascii=False,
-                indent=2,
+                indent=2
             )
 
         os.replace(
@@ -493,8 +547,9 @@ def save_page_discovered_urls():
         )
 
     except Exception as e:
+
         print(
-            f"[ERROR] Could not save page URL map: {e}"
+            f"[ERROR] Could not save page discovery log: {e}"
         )
 
 
@@ -502,9 +557,12 @@ def save_page_discovered_urls():
 # CSV INITIALIZATION
 # ============================================================
 
-if not os.path.exists(current_batch_filename):
+if not os.path.exists(
+    current_batch_filename
+):
 
     try:
+
         with open(
             current_batch_filename,
             "w",
@@ -520,8 +578,9 @@ if not os.path.exists(current_batch_filename):
             writer.writeheader()
 
     except Exception as e:
+
         print(
-            f"[ERROR] Failed to initialize CSV: {e}"
+            f"[ERROR] Could not create CSV: {e}"
         )
 
 
@@ -531,31 +590,41 @@ if not os.path.exists(current_batch_filename):
 
 def create_driver():
 
-    print("[INFO] Booting Chrome...")
+    print(
+        "[INFO] Starting Chrome..."
+    )
 
     options = Options()
 
-    options.add_argument("--headless=new")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=1920,1080")
     options.add_argument(
-        "--disable-features=site-per-process"
+        "--headless=new"
     )
 
     options.add_argument(
-        "--user-agent=Mozilla/5.0 "
+        "--no-sandbox"
+    )
+
+    options.add_argument(
+        "--disable-dev-shm-usage"
+    )
+
+    options.add_argument(
+        "--disable-gpu"
+    )
+
+    options.add_argument(
+        "--window-size=1920,1080"
+    )
+
+    options.add_argument(
+        "--user-agent="
+        "Mozilla/5.0 "
         "(Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 "
         "(KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
+        "Chrome/120.0.0.0 "
+        "Safari/537.36"
     )
-
-    # Reduce unnecessary browser overhead
-    options.add_argument("--disable-notifications")
-    options.add_argument("--disable-popup-blocking")
-    options.add_argument("--disable-extensions")
 
     try:
 
@@ -570,12 +639,16 @@ def create_driver():
 
         drv.set_page_load_timeout(30)
 
+        print(
+            "[INFO] Chrome started."
+        )
+
         return drv
 
     except Exception as e:
 
         print(
-            f"[CRITICAL] Failed to start Chrome: {e}"
+            f"[CRITICAL] Chrome failed to start: {e}"
         )
 
         raise
@@ -585,7 +658,29 @@ driver = create_driver()
 
 
 # ============================================================
-# CSV SAVE
+# DRIVER RESTART
+# ============================================================
+
+def restart_driver():
+
+    global driver
+
+    print(
+        "[INFO] Restarting Chrome..."
+    )
+
+    try:
+        driver.quit()
+    except Exception:
+        pass
+
+    time.sleep(2)
+
+    driver = create_driver()
+
+
+# ============================================================
+# CSV WRITER
 # ============================================================
 
 def save_single_record(record):
@@ -610,49 +705,30 @@ def save_single_record(record):
 
             writer.writerow(record)
 
+        print(
+            f"💾 Saved: "
+            f"{record.get('Име', '-')}"
+        )
+
         return True
 
     except Exception as e:
 
         print(
-            f"[ERROR] Failed to save CSV record: {e}"
+            f"❌ CSV save error: {e}"
         )
 
         return False
 
 
 # ============================================================
-# ERROR CLASSIFICATION
-# ============================================================
-
-def is_browser_crash_error(exception):
-    text = str(exception).lower()
-
-    keywords = [
-        "crashed",
-        "disconnected",
-        "out of memory",
-        "chrome not reachable",
-        "invalid session id",
-        "tab crashed",
-        "session deleted",
-    ]
-
-    return any(
-        keyword in text
-        for keyword in keywords
-    )
-
-
-# ============================================================
-# PAGE URL BUILDER
+# PAGE URL
 # ============================================================
 
 def build_page_url(page):
 
-    page = int(page)
-
     if page == 1:
+
         return BASE_URL
 
     return (
@@ -663,610 +739,448 @@ def build_page_url(page):
 
 
 # ============================================================
-# END-OF-PAGE DETECTION
+# EXACT OLD PAGE PARSING LOGIC
+# ============================================================
+#
+# This deliberately follows your older working scraper:
+#
+#     driver.get()
+#     wait for jet-listing-grid__item
+#     find all cards
+#     extract a.jet-listing-dynamic-link__link
+#
+# No "wait until card count stabilizes".
+# No alternate card selector roulette.
+# No aggressive DOM heuristics.
+#
+# Because the old logic works.
+#
 # ============================================================
 
-def page_is_not_found(driver):
+def parse_listing_page(page):
 
-    try:
+    target_url = build_page_url(page)
 
-        title = (
-            driver.title
-            or ""
-        ).lower()
+    print()
+    print("=" * 70)
+    print(
+        f"📄 PAGE {page}"
+    )
+    print(
+        target_url
+    )
+    print("=" * 70)
 
-        if (
-            "404" in title
-            or "страницата не е намерена" in title
-        ):
-            return True
-
-    except Exception:
-        pass
-
-    try:
-
-        source = (
-            driver.page_source
-            or ""
-        ).lower()
-
-        if (
-            "404 not found" in source
-            or "страницата не е намерена" in source
-        ):
-            return True
-
-    except Exception:
-        pass
-
-    return False
-
-
-def page_has_no_data(driver):
-
-    try:
-
-        elements = driver.find_elements(
-            By.CLASS_NAME,
-            "jet-listing-not-found"
-        )
-
-        for element in elements:
-
-            try:
-
-                if not element.is_displayed():
-                    continue
-
-                text = (
-                    element.text
-                    or ""
-                ).strip().lower()
-
-                if (
-                    "no data was found"
-                    in text
-                    or "няма намерени данни"
-                    in text
-                ):
-                    return True
-
-            except Exception:
-                continue
-
-    except Exception:
-        pass
-
-    return False
-
-
-# ============================================================
-# LISTING CARD LOCATOR
-# ============================================================
-
-CARD_XPATH = (
-    "//div[contains("
-    "@class, "
-    "'jet-listing-grid__item'"
-    ")]"
-)
-
-
-def get_listing_cards(driver):
-
-    return driver.find_elements(
-        By.XPATH,
-        CARD_XPATH
+    driver.get(
+        target_url
     )
 
+    # Same behavior as old scraper:
+    # page 1 gets slightly longer initial wait.
+    wait_time = (
+        PAGE1_WAIT_SECONDS
+        if page == 1
+        else OTHER_PAGE_WAIT_SECONDS
+    )
 
-# ============================================================
-# WAIT FOR LISTING TO STABILIZE
-# ============================================================
+    # --------------------------------------------------------
+    # 404 detection
+    # --------------------------------------------------------
 
-def wait_for_stable_listing(driver):
+    try:
 
-    start = time.time()
-
-    last_count = -1
-    stable_since = None
-
-    best_cards = []
-
-    while (
-        time.time() - start
-        < PAGE_MAX_WAIT_SECONDS
-    ):
-
-        if time_limit_reached():
-            break
-
-        if page_is_not_found(driver):
-            return [], "404"
-
-        if page_has_no_data(driver):
-            return [], "NO_DATA"
-
-        try:
-
-            cards = get_listing_cards(driver)
-
-            count = len(cards)
-
-        except (
-            StaleElementReferenceException,
-            WebDriverException
+        if (
+            "404"
+            in (driver.title or "")
         ):
 
-            time.sleep(
-                PAGE_POLL_INTERVAL
+            print(
+                "⛔ 404 detected."
             )
 
-            continue
+            return {
+                "status": "END",
+                "doctors": [],
+                "cards": []
+            }
 
-        if count > 0:
+        if (
+            "Страницата не е намерена"
+            in (driver.page_source or "")
+        ):
 
-            best_cards = cards
+            print(
+                "⛔ 'Страницата не е намерена' detected."
+            )
 
-            if count == last_count:
+            return {
+                "status": "END",
+                "doctors": [],
+                "cards": []
+            }
 
-                if stable_since is None:
-                    stable_since = time.time()
+    except Exception:
+        pass
 
-                elif (
-                    time.time()
-                    - stable_since
-                    >= PAGE_STABLE_SECONDS
-                ):
-                    print(
-                        f"      [INFO] "
-                        f"Listing stabilized at "
-                        f"{count} cards."
-                    )
+    # --------------------------------------------------------
+    # Wait exactly like old scraper
+    # --------------------------------------------------------
 
-                    return best_cards, "OK"
+    try:
 
-            else:
-
-                print(
-                    f"      [DEBUG] "
-                    f"Card count changed: "
-                    f"{last_count} -> {count}"
+        WebDriverWait(
+            driver,
+            wait_time
+        ).until(
+            EC.presence_of_element_located(
+                (
+                    By.CLASS_NAME,
+                    "jet-listing-grid__item"
                 )
-
-                last_count = count
-                stable_since = None
-
-        else:
-
-            stable_since = None
-
-        time.sleep(
-            PAGE_POLL_INTERVAL
+            )
         )
 
-    if best_cards:
+    except TimeoutException:
 
         print(
-            f"      [WARN] Listing did not "
-            f"fully stabilize within "
-            f"{PAGE_MAX_WAIT_SECONDS}s. "
-            f"Using best observed count: "
-            f"{len(best_cards)}."
+            f"⛔ No listing cards appeared "
+            f"within {wait_time} seconds."
         )
 
-        return best_cards, "UNSTABLE_WITH_CARDS"
+        return {
+            "status": "FAILED",
+            "doctors": [],
+            "cards": []
+        }
 
-    return [], "EMPTY"
+    # --------------------------------------------------------
+    # Find cards exactly like old scraper
+    # --------------------------------------------------------
 
-
-# ============================================================
-# EXTRACT DOCTOR FROM CARD
-# ============================================================
-
-LINK_SELECTORS = [
-    "a.jet-listing-dynamic-link__link",
-    "a[href*='/doctor']",
-    "a[href*='/doctors']",
-    "a[href]",
-]
-
-
-def extract_doctor_from_card(card):
-
-    last_error = None
-
-    for selector in LINK_SELECTORS:
-
-        try:
-
-            links = card.find_elements(
-                By.CSS_SELECTOR,
-                selector
-            )
-
-            for link_el in links:
-
-                raw_url = (
-                    link_el.get_attribute("href")
-                    or ""
-                ).strip()
-
-                if not raw_url:
-                    continue
-
-                # Ignore javascript / mail / tel links
-                lower_url = raw_url.lower()
-
-                if (
-                    lower_url.startswith("javascript:")
-                    or lower_url.startswith("mailto:")
-                    or lower_url.startswith("tel:")
-                    or lower_url.startswith("#")
-                ):
-                    continue
-
-                # Prefer doctor-profile-looking links
-                if (
-                    "/doctor" not in lower_url
-                    and
-                    "/lek" not in lower_url
-                    and
-                    "/лекар" not in lower_url
-                ):
-                    # We may still accept it as a fallback
-                    # only when it's clearly an absolute URL.
-                    if not lower_url.startswith(
-                        "https://zdraven-arhiv.com/"
-                    ):
-                        continue
-
-                name = (
-                    link_el.text
-                    or ""
-                ).strip()
-
-                if not name:
-                    name = (
-                        card.text
-                        or ""
-                    ).split("\n")[0].strip()
-
-                decoded_url = normalize_url(
-                    raw_url
-                )
-
-                return {
-                    "Име": name or "Unknown",
-                    "RAW_URL": raw_url,
-                    "URL": decoded_url,
-                    "Описание (Лист)": "-",
-                }
-
-        except Exception as e:
-
-            last_error = e
-
-    raise NoSuchElementException(
-        f"Could not extract doctor link "
-        f"from card. Last error: {last_error}"
+    cards = driver.find_elements(
+        By.XPATH,
+        "//div[contains(@class, "
+        "'jet-listing-grid__item')]"
     )
 
+    if not cards:
 
-# ============================================================
-# EXTRACT ALL DOCTORS FROM PAGE
-# ============================================================
+        print(
+            "⛔ No cards found."
+        )
 
-def extract_doctors_from_page(
-    cards,
-    page_number
-):
+        return {
+            "status": "FAILED",
+            "doctors": [],
+            "cards": []
+        }
 
-    doctors = []
+    print(
+        f"🔎 Found {len(cards)} cards."
+    )
 
-    seen_urls = set()
+    doctors_on_page = []
 
-    failed_cards = 0
+    # ========================================================
+    # CARD PARSING
+    # ========================================================
 
-    for index, card in enumerate(
+    for card_index, card in enumerate(
         cards,
         start=1
     ):
 
         try:
 
-            doc = extract_doctor_from_card(
-                card
+            # ------------------------------------------------
+            # EXACT working selector from old scraper
+            # ------------------------------------------------
+
+            link_el = card.find_element(
+                By.CSS_SELECTOR,
+                "a.jet-listing-dynamic-link__link"
             )
 
-            url = doc["URL"]
-
-            if not url:
-                raise ValueError(
-                    "Doctor URL is empty"
+            raw_url = (
+                link_el.get_attribute(
+                    "href"
                 )
+            )
 
-            # Deduplicate on the page itself
-            if url in seen_urls:
-                print(
-                    f"      [DEBUG] "
-                    f"Duplicate doctor on page "
-                    f"{page_number}: "
-                    f"{doc['Име']}"
-                )
+            name = (
+                link_el.text
+                or ""
+            ).strip()
+
+            if not raw_url:
                 continue
 
-            seen_urls.add(url)
+            # ------------------------------------------------
+            # DESCRIPTION FROM LISTING CARD
+            # ------------------------------------------------
+            #
+            # This is the important fix.
+            #
+            # The old code put "-"
+            # here, even though the listing card
+            # clearly contains description text.
+            #
+            # First, try JetEngine's own dynamic
+            # field content inside the card.
+            #
+            # Then fallback to card text.
+            #
+            # ------------------------------------------------
 
-            doctors.append(doc)
-
-        except (
-            Exception
-        ) as e:
-
-            failed_cards += 1
-
-            card_text = (
-                card.text
-                or ""
-            ).strip().replace(
-                "\n",
-                " | "
+            description = extract_listing_description(
+                card,
+                name
             )
+
+            doc_data = {
+                "Име": name,
+                "RAW_URL": raw_url,
+                "URL": normalize_url(raw_url),
+                "Описание (Лист)": description
+            }
+
+            doctors_on_page.append(
+                doc_data
+            )
+
+        except Exception as e:
 
             print(
-                f"      [WARN] Failed to "
-                f"extract card #{index} "
-                f"on page {page_number}: "
-                f"{e}"
+                f"⚠️ Card #{card_index} "
+                f"could not be parsed: {e}"
             )
 
-            print(
-                f"             Card text: "
-                f"{card_text[:250]}"
-            )
+            continue
 
-    print(
-        f"      [INFO] Extracted "
-        f"{len(doctors)} unique doctors "
-        f"from {len(cards)} cards. "
-        f"Failed cards: {failed_cards}"
-    )
+    # --------------------------------------------------------
+    # Page discovery logging
+    # --------------------------------------------------------
 
-    return doctors, failed_cards
-
-
-# ============================================================
-# SAVE PAGE DISCOVERY
-# ============================================================
-
-def save_page_discovery(
-    page_number,
-    doctors,
-    card_count,
-    failed_card_count,
-    status
-):
-
-    page_key = str(page_number)
-
-    page_discovered_urls[page_key] = {
-        "timestamp": datetime.now().strftime(
-            "%Y-%m-%d %H:%M:%S"
-        ),
-        "card_count": card_count,
-        "extracted_count": len(doctors),
-        "failed_card_count": failed_card_count,
-        "status": status,
-        "urls": [
-            normalize_url(
-                d["URL"]
-            )
-            for d in doctors
-        ],
+    page_discovered_urls[
+        str(page)
+    ] = {
+        "timestamp":
+            datetime.now().strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ),
+        "card_count":
+            len(cards),
+        "doctor_count":
+            len(doctors_on_page),
+        "urls":
+            [
+                x["URL"]
+                for x in doctors_on_page
+            ]
     }
 
     save_page_discovered_urls()
 
+    print(
+        f"✅ Extracted "
+        f"{len(doctors_on_page)} doctors "
+        f"from {len(cards)} cards."
+    )
+
+    return {
+        "status": "OK",
+        "doctors": doctors_on_page,
+        "cards": cards
+    }
+
 
 # ============================================================
-# LOAD A PAGE
+# DESCRIPTION EXTRACTION
 # ============================================================
 
-def load_page(
-    page_number,
-    retry_number=0
+def clean_text(text):
+
+    if not text:
+        return ""
+
+    text = text.replace(
+        "\xa0",
+        " "
+    )
+
+    text = re.sub(
+        r"\s+",
+        " ",
+        text
+    )
+
+    return text.strip()
+
+
+def extract_listing_description(
+    card,
+    doctor_name
 ):
 
-    target_url = build_page_url(
-        page_number
-    )
-
-    print(
-        f"  > Loading PAGE {page_number}: "
-        f"{target_url}"
-    )
+    # ========================================================
+    # METHOD 1
+    # JetEngine dynamic field content
+    # ========================================================
 
     try:
 
-        driver.get(
-            target_url
+        elements = card.find_elements(
+            By.XPATH,
+            ".//*[contains("
+            "@class,"
+            "'jet-listing-dynamic-field__content'"
+            ")]"
         )
 
-        # First let the document load
-        try:
+        candidates = []
 
-            WebDriverWait(
-                driver,
-                15
-            ).until(
-                lambda d:
-                d.execute_script(
-                    "return document.readyState"
+        for element in elements:
+
+            try:
+
+                text = (
+                    element.get_attribute(
+                        "innerText"
+                    )
+                    or ""
                 )
-                in (
-                    "interactive",
-                    "complete"
+
+                text = clean_text(text)
+
+                if not text:
+                    continue
+
+                candidates.append(text)
+
+            except Exception:
+                continue
+
+        # Remove exact duplicates
+        candidates = list(
+            dict.fromkeys(candidates)
+        )
+
+        # ----------------------------------------------------
+        # Pick the most description-like field.
+        #
+        # Description normally contains considerably more
+        # text than the address field.
+        # ----------------------------------------------------
+
+        filtered = []
+
+        for text in candidates:
+
+            if (
+                text == clean_text(
+                    doctor_name
                 )
-            )
+            ):
+                continue
 
-        except Exception:
-            pass
+            if text == "Разгледай":
+                continue
 
-        # Small initial delay
-        time.sleep(1.5)
+            filtered.append(text)
 
-        if page_is_not_found(driver):
+        # Strong candidate:
+        # a reasonably long text which isn't just an address.
+        description_candidates = []
 
-            print(
-                f"      [INFO] Page {page_number} "
-                f"is 404."
-            )
+        for text in filtered:
 
-            return {
-                "status": "404",
-                "cards": [],
-                "doctors": [],
-            }
+            # Skip obvious addresses
+            if re.match(
+                r"^(гр\.|с\.|ул\.|бул\.|кв\.|"
+                r"\d{4}|ж\.к\.)",
+                text,
+                re.IGNORECASE
+            ):
+                continue
 
-        if page_has_no_data(driver):
+            if len(text) >= 30:
+                description_candidates.append(
+                    text
+                )
 
-            print(
-                f"      [INFO] Page {page_number} "
-                f"contains no data."
-            )
+        if description_candidates:
 
-            return {
-                "status": "NO_DATA",
-                "cards": [],
-                "doctors": [],
-            }
+            # Usually the first dynamic text field
+            # after the title is the listing description.
+            return description_candidates[0]
 
-        cards, wait_status = (
-            wait_for_stable_listing(
-                driver
-            )
-        )
+        # If there isn't a long candidate,
+        # return the first non-title candidate.
+        if filtered:
 
-        if not cards:
+            return filtered[0]
 
-            return {
-                "status": "EMPTY",
-                "cards": [],
-                "doctors": [],
-            }
-
-        doctors, failed_cards = (
-            extract_doctors_from_page(
-                cards,
-                page_number
-            )
-        )
-
-        save_page_discovery(
-            page_number,
-            doctors,
-            len(cards),
-            failed_cards,
-            wait_status
-        )
-
-        # A page with zero extracted doctors is suspicious.
-        if not doctors:
-
-            print(
-                f"      [WARN] Page {page_number} "
-                f"had {len(cards)} cards but "
-                f"0 doctor URLs were extracted."
-            )
-
-            return {
-                "status": "BROKEN",
-                "cards": cards,
-                "doctors": [],
-            }
-
-        # A significant number of failed cards is suspicious.
-        failure_ratio = (
-            failed_cards / len(cards)
-            if cards
-            else 1
-        )
-
-        if failure_ratio >= 0.25:
-
-            print(
-                f"      [WARN] Page {page_number} "
-                f"has a high card extraction "
-                f"failure rate: "
-                f"{failed_cards}/{len(cards)}"
-            )
-
-            return {
-                "status": "SUSPICIOUS",
-                "cards": cards,
-                "doctors": doctors,
-            }
-
-        return {
-            "status": "OK",
-            "cards": cards,
-            "doctors": doctors,
-        }
-
-    except WebDriverException as e:
-
-        print(
-            f"      [ERROR] WebDriver error "
-            f"on page {page_number}: {e}"
-        )
-
-        if is_browser_crash_error(e):
-
-            print(
-                "      [CRITICAL] Browser/session "
-                "appears dead. Recreating driver..."
-            )
-
-            recreate_driver()
-
-        return {
-            "status": "ERROR",
-            "cards": [],
-            "doctors": [],
-        }
-
-    except Exception as e:
-
-        print(
-            f"      [ERROR] Failed loading "
-            f"page {page_number}: {e}"
-        )
-
-        return {
-            "status": "ERROR",
-            "cards": [],
-            "doctors": [],
-        }
-
-
-# ============================================================
-# DRIVER RESTART
-# ============================================================
-
-def recreate_driver():
-
-    global driver
-
-    try:
-        driver.quit()
     except Exception:
         pass
 
-    time.sleep(2)
+    # ========================================================
+    # METHOD 2
+    # Card text fallback
+    # ========================================================
 
-    driver = create_driver()
+    try:
+
+        card_text = (
+            card.text
+            or ""
+        ).strip()
+
+        if card_text:
+
+            lines = [
+                clean_text(x)
+                for x in card_text.splitlines()
+                if clean_text(x)
+            ]
+
+            doctor_name_clean = clean_text(
+                doctor_name
+            )
+
+            # Remove name
+            remaining = []
+
+            for line in lines:
+
+                if line == doctor_name_clean:
+                    continue
+
+                if line == "Разгледай":
+                    continue
+
+                remaining.append(line)
+
+            # Description is usually the first substantial
+            # sentence after the name.
+            for line in remaining:
+
+                if len(line) < 25:
+                    continue
+
+                if re.match(
+                    r"^(гр\.|с\.|ул\.|бул\.|кв\.|"
+                    r"\d{4}|ж\.к\.)",
+                    line,
+                    re.IGNORECASE
+                ):
+                    continue
+
+                return line
+
+    except Exception:
+        pass
+
+    return "-"
 
 
 # ============================================================
@@ -1278,62 +1192,46 @@ def scrape_inner_profile(
     basic_info
 ):
 
-    profile_url = url
+    print(
+        f"   👉 Visiting: {url}"
+    )
 
     try:
 
         driver.get(
-            profile_url
+            url
         )
 
-        # Wait for document
-        try:
-
-            WebDriverWait(
-                driver,
-                15
-            ).until(
-                lambda d:
-                d.execute_script(
-                    "return document.readyState"
-                )
-                in (
-                    "interactive",
-                    "complete"
-                )
-            )
-
-        except Exception:
-            pass
-
+        # Same basic profile behavior as your old,
+        # working scraper.
         time.sleep(
-            PROFILE_INITIAL_WAIT
+            PROFILE_INITIAL_SLEEP
         )
-
-        # ----------------------------------------------------
-        # PHONE / EMAIL / ADDRESS
-        # ----------------------------------------------------
-
-        phones = []
-        emails = []
-        possible_addresses = []
 
         try:
 
             WebDriverWait(
                 driver,
-                6
+                PROFILE_WAIT_SECONDS
             ).until(
                 EC.presence_of_element_located(
                     (
-                        By.CSS_SELECTOR,
-                        ".elementor-widget-icon-box"
+                        By.CLASS_NAME,
+                        "elementor-widget-icon-box"
                     )
                 )
             )
 
         except Exception:
             pass
+
+        # ====================================================
+        # PHONES / EMAILS / ADDRESSES
+        # ====================================================
+
+        phones = []
+        emails = []
+        possible_addresses = []
 
         try:
 
@@ -1363,19 +1261,13 @@ def scrape_inner_profile(
 
                         continue
 
-                    # Bulgarian phone patterns
-                    normalized_phone = re.sub(
-                        r"[\s\-\(\)]",
-                        "",
-                        text
-                    )
-
+                    # Phone
                     if (
                         re.search(
-                            r"(\+359|00359|08[789]|02)",
-                            normalized_phone
+                            r"(\+359|08[789]|02)",
+                            text
                         )
-                        and len(normalized_phone) < 25
+                        and len(text) < 20
                     ):
 
                         if text not in phones:
@@ -1383,21 +1275,34 @@ def scrape_inner_profile(
 
                         continue
 
-                    # Candidate addresses
+                    # Address
                     if len(text) > 10:
 
-                        if text not in possible_addresses:
-                            possible_addresses.append(text)
+                        if (
+                            text
+                            not in
+                            possible_addresses
+                        ):
 
-                except StaleElementReferenceException:
+                            possible_addresses.append(
+                                text
+                            )
+
+                except (
+                    StaleElementReferenceException
+                ):
                     continue
 
-        except Exception:
-            pass
+        except Exception as e:
 
-        # ----------------------------------------------------
+            print(
+                f"⚠️ Could not parse "
+                f"icon boxes: {e}"
+            )
+
+        # ====================================================
         # GOOGLE MAP
-        # ----------------------------------------------------
+        # ====================================================
 
         map_pin_address = "-"
         clickable_map_link = "-"
@@ -1410,11 +1315,13 @@ def scrape_inner_profile(
             )
 
             raw_address = (
-                iframe.get_attribute("title")
+                iframe.get_attribute(
+                    "title"
+                )
                 or
-                iframe.get_attribute("aria-label")
-                or
-                iframe.get_attribute("data-address")
+                iframe.get_attribute(
+                    "aria-label"
+                )
             )
 
             if raw_address:
@@ -1423,20 +1330,24 @@ def scrape_inner_profile(
                     raw_address.strip()
                 )
 
-                clickable_map_link = (
-                    "https://www.google.com/maps/search/"
-                    "?api=1&query="
-                    + urllib.parse.quote(
-                        map_pin_address
+                encoded_address = (
+                    urllib.parse.quote(
+                        raw_address
                     )
+                )
+
+                clickable_map_link = (
+                    "https://www.google.com/maps/"
+                    "search/?api=1&query="
+                    + encoded_address
                 )
 
         except Exception:
             pass
 
-        # ----------------------------------------------------
+        # ====================================================
         # TEXT ADDRESS
-        # ----------------------------------------------------
+        # ====================================================
 
         text_address = (
             map_pin_address
@@ -1448,15 +1359,15 @@ def scrape_inner_profile(
             )
         )
 
-        # ----------------------------------------------------
+        # ====================================================
         # BIOGRAPHY
-        # ----------------------------------------------------
+        # ====================================================
 
         full_bio = "-"
 
         try:
 
-            bio_candidates = driver.find_elements(
+            bio_el = driver.find_element(
                 By.XPATH,
                 "//div[contains("
                 "@class, "
@@ -1464,45 +1375,22 @@ def scrape_inner_profile(
                 ")]"
             )
 
-            bio_parts = []
-
-            for element in bio_candidates:
-
-                try:
-
-                    text = (
-                        element.get_attribute(
-                            "innerText"
-                        )
-                        or ""
-                    ).strip()
-
-                    if text:
-                        bio_parts.append(text)
-
-                except Exception:
-                    continue
-
-            if bio_parts:
-
-                # Remove duplicates while preserving order
-                unique_bio = list(
-                    dict.fromkeys(bio_parts)
+            full_bio = (
+                bio_el.get_attribute(
+                    "innerText"
                 )
-
-                full_bio = " || ".join(
-                    unique_bio
-                ).replace(
-                    "\n",
-                    " || "
-                )
+                or ""
+            ).strip().replace(
+                "\n",
+                " || "
+            )
 
         except Exception:
             pass
 
-        # ----------------------------------------------------
+        # ====================================================
         # BREADCRUMB
-        # ----------------------------------------------------
+        # ====================================================
 
         breadcrumb_info = "-"
 
@@ -1521,23 +1409,25 @@ def scrape_inner_profile(
         except Exception:
             pass
 
-        # ----------------------------------------------------
-        # FINAL DATA
-        # ----------------------------------------------------
+        # ====================================================
+        # FINAL RECORD
+        # ====================================================
 
         basic_info.update(
             {
-                "Телефони": (
+                # NOTE:
+                # "Описание (Лист)" is NOT overwritten here.
+                # It comes from the listing page.
+
+                "Телефони":
                     ", ".join(phones)
                     if phones
-                    else "-"
-                ),
+                    else "-",
 
-                "Email": (
+                "Email":
                     ", ".join(emails)
                     if emails
-                    else "-"
-                ),
+                    else "-",
 
                 "Адрес (Текст)":
                     text_address,
@@ -1560,7 +1450,7 @@ def scrape_inner_profile(
                 "Timestamp":
                     datetime.now().strftime(
                         "%Y-%m-%d %H:%M:%S"
-                    ),
+                    )
             }
         )
 
@@ -1568,8 +1458,22 @@ def scrape_inner_profile(
 
     except WebDriverException as e:
 
-        if is_browser_crash_error(e):
+        # Browser completely crashed
+        if any(
+            x in str(e).lower()
+            for x in [
+                "crashed",
+                "disconnected",
+                "out of memory",
+                "chrome not reachable",
+                "invalid session id"
+            ]
+        ):
             raise
+
+        print(
+            f"💀 Profile WebDriver error: {e}"
+        )
 
         basic_info.update(
             {
@@ -1580,7 +1484,11 @@ def scrape_inner_profile(
 
         return basic_info
 
-    except Exception:
+    except Exception as e:
+
+        print(
+            f"💀 Profile error: {e}"
+        )
 
         basic_info.update(
             {
@@ -1593,16 +1501,13 @@ def scrape_inner_profile(
 
 
 # ============================================================
-# SCRAPE ONE PROFILE WITH RETRIES
+# PROFILE RETRY
 # ============================================================
 
 def scrape_profile_with_retries(
     doc,
-    page_number
+    page
 ):
-
-    raw_url = doc["RAW_URL"]
-    decoded_url = doc["URL"]
 
     for attempt in range(
         1,
@@ -1610,70 +1515,61 @@ def scrape_profile_with_retries(
     ):
 
         if time_limit_reached():
-
-            print(
-                "[WARN] Time limit reached "
-                "while scraping profile."
-            )
-
             return False
-
-        print(
-            f"      [PROFILE] "
-            f"{doc['Име']} "
-            f"(attempt {attempt}/"
-            f"{MAX_PROFILE_RETRIES})"
-        )
 
         try:
 
-            basic_info = {
-                "Име": doc["Име"],
-                "URL": decoded_url,
-                "Описание (Лист)": "-"
-            }
-
-            full_data = (
-                scrape_inner_profile(
-                    raw_url,
-                    basic_info
-                )
+            print(
+                f"   [{attempt}/"
+                f"{MAX_PROFILE_RETRIES}] "
+                f"{doc['Име']}"
             )
 
-            # ------------------------------------------------
             # IMPORTANT:
-            # Don't mark the profile as parsed if
-            # profile scraping completely failed.
-            # ------------------------------------------------
+            # Create fresh basic_info every attempt
+            # so previous failed data cannot leak.
+            basic_info = {
+                "Име":
+                    doc["Име"],
 
+                "URL":
+                    doc["URL"],
+
+                "Описание (Лист)":
+                    doc.get(
+                        "Описание (Лист)",
+                        "-"
+                    )
+            }
+
+            full_data = scrape_inner_profile(
+                doc["RAW_URL"],
+                basic_info
+            )
+
+            # A real scrape failure should not
+            # be marked as successfully parsed.
             if (
                 full_data.get("Note")
-                == "Profile Scrape Failed"
+                ==
+                "Profile Scrape Failed"
             ):
 
                 raise RuntimeError(
-                    "Profile returned "
-                    "Profile Scrape Failed"
+                    "Profile scrape returned failure."
                 )
 
-            saved = save_single_record(
+            if not save_single_record(
                 full_data
-            )
-
-            if not saved:
+            ):
 
                 raise RuntimeError(
-                    "CSV save failed"
+                    "Failed to save record."
                 )
 
-            # Only now mark as parsed
+            # Only mark parsed AFTER successful save.
             mark_as_parsed(
-                raw_url
-            )
-
-            print(
-                f"      [SUCCESS] "
-                f"Saved: {doc['Име']}"
+                doc["RAW_URL"]
             )
 
             return True
@@ -1681,16 +1577,18 @@ def scrape_profile_with_retries(
         except WebDriverException as e:
 
             print(
-                f"      [WARN] Profile WebDriver "
-                f"error: {e}"
+                f"⚠️ WebDriver error on "
+                f"{doc['Име']}: {e}"
             )
 
-            if is_browser_crash_error(e):
+            try:
 
-                recreate_driver()
+                restart_driver()
+
+            except Exception:
+                pass
 
             if attempt < MAX_PROFILE_RETRIES:
-
                 time.sleep(
                     RETRY_DELAY_SECONDS
                 )
@@ -1698,50 +1596,45 @@ def scrape_profile_with_retries(
         except Exception as e:
 
             print(
-                f"      [WARN] Profile scrape "
-                f"failed: {e}"
+                f"⚠️ Profile failed: {e}"
             )
 
             if attempt < MAX_PROFILE_RETRIES:
-
                 time.sleep(
                     RETRY_DELAY_SECONDS
                 )
 
     # --------------------------------------------------------
-    # All profile attempts failed
+    # Completely failed
     # --------------------------------------------------------
 
     print(
-        f"      [FAILED] Could not scrape "
-        f"{doc['Име']} after "
-        f"{MAX_PROFILE_RETRIES} attempts."
+        f"❌ FAILED PROFILE: "
+        f"{doc['Име']}"
     )
 
     add_failed_profile(
         doc["Име"],
-        raw_url,
-        page_number,
-        "All scrape attempts failed"
+        doc["URL"],
+        page,
+        "All profile attempts failed"
     )
 
     return False
 
 
 # ============================================================
-# PROCESS DOCTORS FROM PAGE
+# PROCESS PAGE'S DOCTORS
 # ============================================================
 
 def process_doctors(
     doctors,
-    page_number
+    page
 ):
 
     processed = 0
     skipped = 0
     failed = 0
-
-    total = len(doctors)
 
     for index, doc in enumerate(
         doctors,
@@ -1751,31 +1644,36 @@ def process_doctors(
         if time_limit_reached():
             break
 
+        print()
         print(
-            f"      [{index}/{total}] "
+            f"👨‍⚕️ [{index}/{len(doctors)}] "
             f"{doc['Име']}"
         )
 
-        raw_url = doc["RAW_URL"]
-        decoded_url = doc["URL"]
+        # ----------------------------------------------------
+        # Resume logic
+        # ----------------------------------------------------
 
         if is_already_parsed(
-            decoded_url
+            doc["URL"]
         ):
 
             print(
-                "          [SKIP] "
-                "Already parsed."
+                "   ⏭️ Already parsed."
             )
 
             skipped += 1
 
             continue
 
+        # ----------------------------------------------------
+        # Profile
+        # ----------------------------------------------------
+
         success = (
             scrape_profile_with_retries(
                 doc,
-                page_number
+                page
             )
         )
 
@@ -1785,243 +1683,265 @@ def process_doctors(
             failed += 1
 
     return {
-        "processed": processed,
-        "skipped": skipped,
-        "failed": failed,
+        "processed":
+            processed,
+
+        "skipped":
+            skipped,
+
+        "failed":
+            failed
     }
 
 
 # ============================================================
-# PROCESS ONE PAGE
+# PROCESS SINGLE PAGE
 # ============================================================
 
 def process_page(
-    page_number,
-    phase_name
+    page,
+    phase="Phase 1"
 ):
 
-    print()
-    print("=" * 70)
-    print(
-        f"{phase_name} | PAGE {page_number}"
-    )
-    print("=" * 70)
-
-    for page_attempt in range(
+    for attempt in range(
         1,
-        MAX_PAGE_LOAD_RETRIES + 1
+        MAX_PAGE_RETRIES + 1
     ):
 
         if time_limit_reached():
+
             return {
-                "success": False,
-                "end": False,
-                "retry": True,
-                "reason": "TIME_LIMIT",
+                "status":
+                    "TIME_LIMIT"
             }
 
         print(
-            f"  [PAGE ATTEMPT "
-            f"{page_attempt}/"
-            f"{MAX_PAGE_LOAD_RETRIES}]"
+            f"\n🔄 {phase} | "
+            f"Page {page} | "
+            f"Attempt {attempt}/"
+            f"{MAX_PAGE_RETRIES}"
         )
 
-        result = load_page(
-            page_number,
-            page_attempt
-        )
+        try:
 
-        status = result["status"]
-
-        # ----------------------------------------------------
-        # Legitimate end of pagination
-        # ----------------------------------------------------
-
-        if status in (
-            "404",
-            "NO_DATA"
-        ):
-
-            print(
-                f"  [END] Page {page_number} "
-                f"signals end of database."
+            result = parse_listing_page(
+                page
             )
 
-            return {
-                "success": True,
-                "end": True,
-                "retry": False,
-                "reason": status,
-            }
+            status = result["status"]
 
-        doctors = result.get(
-            "doctors",
-            []
-        )
+            # ------------------------------------------------
+            # REAL END
+            # ------------------------------------------------
 
-        # ----------------------------------------------------
-        # Successful / suspicious page with doctors
-        # ----------------------------------------------------
+            if status == "END":
 
-        if doctors:
+                return {
+                    "status":
+                        "END"
+                }
 
-            # Save all discovered URLs,
-            # even if some are already parsed.
-            page_discovered_urls[
-                str(page_number)
-            ] = {
-                "timestamp":
-                    datetime.now().strftime(
-                        "%Y-%m-%d %H:%M:%S"
-                    ),
+            # ------------------------------------------------
+            # FAILED PAGE
+            # ------------------------------------------------
 
-                "card_count":
-                    len(result.get(
-                        "cards",
-                        []
-                    )),
+            if status == "FAILED":
 
-                "extracted_count":
-                    len(doctors),
+                if (
+                    attempt
+                    <
+                    MAX_PAGE_RETRIES
+                ):
 
-                "status":
-                    status,
+                    print(
+                        "🔁 Retrying page..."
+                    )
 
-                "urls":
-                    [
-                        normalize_url(
-                            d["URL"]
-                        )
-                        for d in doctors
-                    ],
-            }
+                    time.sleep(
+                        RETRY_DELAY_SECONDS
+                    )
 
-            save_page_discovered_urls()
+                    continue
+
+                print(
+                    f"❌ Page {page} "
+                    f"failed after "
+                    f"{MAX_PAGE_RETRIES} attempts."
+                )
+
+                add_failed_page(
+                    page
+                )
+
+                return {
+                    "status":
+                        "FAILED"
+                }
+
+            # ------------------------------------------------
+            # PAGE LOADED
+            # ------------------------------------------------
+
+            doctors = (
+                result["doctors"]
+            )
+
+            if not doctors:
+
+                print(
+                    "⚠️ Page loaded but "
+                    "no doctors were extracted."
+                )
+
+                if (
+                    attempt
+                    <
+                    MAX_PAGE_RETRIES
+                ):
+
+                    time.sleep(
+                        RETRY_DELAY_SECONDS
+                    )
+
+                    continue
+
+                add_failed_page(
+                    page
+                )
+
+                return {
+                    "status":
+                        "FAILED"
+                }
+
+            # ------------------------------------------------
+            # PROCESS DOCTORS
+            # ------------------------------------------------
 
             stats = process_doctors(
                 doctors,
-                page_number
+                page
             )
 
             print()
             print(
-                f"  [PAGE SUMMARY] "
-                f"Page {page_number}"
+                f"📊 PAGE {page} SUMMARY"
             )
 
             print(
-                f"      Extracted: "
+                f"   Cards found: "
+                f"{len(result['cards'])}"
+            )
+
+            print(
+                f"   Doctors extracted: "
                 f"{len(doctors)}"
             )
 
             print(
-                f"      Processed: "
+                f"   Newly processed: "
                 f"{stats['processed']}"
             )
 
             print(
-                f"      Skipped: "
+                f"   Already parsed: "
                 f"{stats['skipped']}"
             )
 
             print(
-                f"      Failed profiles: "
+                f"   Failed profiles: "
                 f"{stats['failed']}"
             )
 
-            # If page itself was suspicious,
-            # keep it for Phase 2.
-            if status in (
-                "BROKEN",
-                "SUSPICIOUS"
+            # Page itself worked.
+            remove_failed_page(
+                page
+            )
+
+            return {
+                "status":
+                    "OK"
+            }
+
+        except WebDriverException as e:
+
+            print(
+                f"💥 WebDriver failure on "
+                f"page {page}: {e}"
+            )
+
+            try:
+                restart_driver()
+            except Exception:
+                pass
+
+            if (
+                attempt
+                <
+                MAX_PAGE_RETRIES
             ):
 
-                print(
-                    f"  [WARN] Page "
-                    f"{page_number} is marked "
-                    f"for Phase 2 verification."
+                time.sleep(
+                    RETRY_DELAY_SECONDS
                 )
 
-                add_failed_page(
-                    page_number
+                continue
+
+        except Exception as e:
+
+            print(
+                f"🤬 Error on page {page}: {e}"
+            )
+
+            if (
+                attempt
+                <
+                MAX_PAGE_RETRIES
+            ):
+
+                time.sleep(
+                    RETRY_DELAY_SECONDS
                 )
 
-                return {
-                    "success": True,
-                    "end": False,
-                    "retry": False,
-                    "reason": "SUSPICIOUS",
-                }
+                continue
 
-            remove_failed_page(
-                page_number
-            )
-
-            return {
-                "success": True,
-                "end": False,
-                "retry": False,
-                "reason": "OK",
-            }
-
-        # ----------------------------------------------------
-        # No doctors extracted
-        # ----------------------------------------------------
-
-        print(
-            f"  [WARN] Page {page_number} "
-            f"returned no doctor URLs."
-        )
-
-        if page_attempt < MAX_PAGE_LOAD_RETRIES:
-
-            print(
-                "  [INFO] Retrying page..."
-            )
-
-            time.sleep(
-                RETRY_DELAY_SECONDS
-            )
-
-        else:
-
-            print(
-                f"  [FAILED PAGE] "
-                f"Page {page_number} "
-                f"will be retried in Phase 2."
-            )
-
-            add_failed_page(
-                page_number
-            )
-
-            return {
-                "success": False,
-                "end": False,
-                "retry": True,
-                "reason": status,
-            }
+    add_failed_page(
+        page
+    )
 
     return {
-        "success": False,
-        "end": False,
-        "retry": True,
-        "reason": "UNKNOWN",
+        "status":
+            "FAILED"
     }
 
 
 # ============================================================
-# PHASE 2
+# PHASE 2: FAILED PAGES
 # ============================================================
 
 def run_phase_2():
 
+    failed_pages = (
+        load_failed_pages()
+    )
+
+    if not failed_pages:
+
+        print(
+            "[INFO] No failed pages."
+        )
+
+        return
+
     print()
     print("=" * 70)
-    print("PHASE 2 | RECHECK PROBLEMATIC PAGES")
+    print(
+        "🔁 PHASE 2 - RETRY FAILED PAGES"
+    )
     print("=" * 70)
 
-    while True:
+    # Work through a copy.
+    for page in failed_pages:
 
         if time_limit_reached():
 
@@ -2030,90 +1950,54 @@ def run_phase_2():
                 "during Phase 2."
             )
 
-            return False
-
-        failed_pages = (
-            load_failed_pages()
-        )
-
-        if not failed_pages:
-
-            print(
-                "[SUCCESS] Phase 2 complete. "
-                "No failed pages remain."
-            )
-
-            return True
+            return
 
         print(
-            f"[INFO] Pages awaiting "
-            f"verification: {failed_pages}"
+            f"\n🔁 Retrying failed page "
+            f"{page}"
         )
-
-        target_page = failed_pages[0]
 
         result = process_page(
-            target_page,
-            "PHASE 2"
+            page,
+            phase="Phase 2"
         )
 
-        if result["end"]:
+        if result["status"] == "OK":
 
             remove_failed_page(
-                target_page
+                page
             )
 
-            continue
+        elif result["status"] == "END":
 
-        # If page succeeded, process_page()
-        # may already have removed it.
-        if (
-            target_page
-            not in load_failed_pages()
-        ):
-            continue
-
-        # If it still failed, rotate it to
-        # the end of the queue.
-        failed_pages = (
-            load_failed_pages()
-        )
-
-        if target_page in failed_pages:
-
-            failed_pages.remove(
-                target_page
+            remove_failed_page(
+                page
             )
-
-            failed_pages.append(
-                target_page
-            )
-
-            save_failed_pages(
-                failed_pages
-            )
-
-        time.sleep(1)
 
 
 # ============================================================
-# MAIN PIPELINE
+# MAIN
 # ============================================================
 
 if os.path.exists(
     CONTINUE_FLAG_FILE
 ):
+
     try:
+
         os.remove(
             CONTINUE_FLAG_FILE
         )
+
     except Exception:
         pass
 
 
-current_phase = state.get(
-    "phase",
-    1
+current_phase = int(
+    state.get(
+        "phase",
+        1
+    )
 )
 
 page = int(
@@ -2133,21 +2017,21 @@ consecutive_fails = int(
 
 print()
 print("=" * 70)
-print("ZDRAVEN ARHIV DOCTORS SCRAPER")
+print(
+    "🚀 ZDRAVEN ARHIV SCRAPER"
+)
 print("=" * 70)
 print(
-    f"Starting phase: {current_phase}"
+    f"Starting phase: "
+    f"{current_phase}"
 )
 print(
-    f"Starting page: {page}"
+    f"Starting page: "
+    f"{page}"
 )
 print(
-    f"Cached parsed URLs: "
+    f"Cached URLs: "
     f"{len(parsed_urls)}"
-)
-print(
-    f"Time limit: "
-    f"{TIME_LIMIT_SECONDS / 3600:.2f} hours"
 )
 print("=" * 70)
 
@@ -2165,8 +2049,7 @@ try:
             if time_limit_reached():
 
                 print(
-                    "[WARN] Time limit reached. "
-                    "Saving state."
+                    "\n⏰ Time limit reached."
                 )
 
                 save_state(
@@ -2182,6 +2065,7 @@ try:
                     "w",
                     encoding="utf-8"
                 ) as f:
+
                     f.write(
                         "CONTINUE_REQUIRED"
                     )
@@ -2190,19 +2074,19 @@ try:
 
             result = process_page(
                 page,
-                "PHASE 1"
+                phase="Phase 1"
             )
 
             # ------------------------------------------------
             # End of database
             # ------------------------------------------------
 
-            if result["end"]:
+            if result["status"] == "END":
 
                 print()
                 print(
-                    "[INFO] Phase 1 reached "
-                    "the end of the database."
+                    "🏁 Reached the end "
+                    "of the database."
                 )
 
                 current_phase = 2
@@ -2216,10 +2100,10 @@ try:
                 break
 
             # ------------------------------------------------
-            # Successful page
+            # Page success/failure
             # ------------------------------------------------
 
-            if result["success"]:
+            if result["status"] == "OK":
 
                 consecutive_fails = 0
 
@@ -2228,13 +2112,14 @@ try:
                 consecutive_fails += 1
 
                 print(
-                    f"[WARN] Consecutive page "
-                    f"failure count: "
+                    f"⚠️ Page failure count: "
                     f"{consecutive_fails}"
                 )
 
             # ------------------------------------------------
-            # Move to next page
+            # IMPORTANT:
+            # Move sequentially exactly like the old
+            # working scraper.
             # ------------------------------------------------
 
             page += 1
@@ -2247,27 +2132,27 @@ try:
                 )
             )
 
-            # ------------------------------------------------
-            # Do not blindly assume 10 broken pages
-            # means end of database.
-            #
-            # We only move on when we've actually reached
-            # an explicit 404 / no-data response.
-            # ------------------------------------------------
-
     # ========================================================
     # PHASE 2
     # ========================================================
 
     if current_phase == 2:
 
-        completed = run_phase_2()
+        run_phase_2()
 
-        if not completed:
+        remaining_failed = (
+            load_failed_pages()
+        )
+
+        if remaining_failed:
+
+            print()
+            print(
+                "⚠️ Some pages still failed:"
+            )
 
             print(
-                "[WARN] Phase 2 did not "
-                "finish before time limit."
+                remaining_failed
             )
 
             save_state(
@@ -2281,6 +2166,7 @@ try:
                 "w",
                 encoding="utf-8"
             ) as f:
+
                 f.write(
                     "CONTINUE_REQUIRED"
                 )
@@ -2288,89 +2174,91 @@ try:
         else:
 
             print()
+            print("=" * 70)
             print(
-                "=" * 70
+                "✅ SCRAPING COMPLETE"
             )
+            print("=" * 70)
 
             print(
-                "[SUCCESS] SCRAPING COMPLETE."
-            )
-
-            print(
-                f"Parsed URL cache size: "
+                f"Cached URLs: "
                 f"{len(parsed_urls)}"
             )
 
             print(
-                f"Output CSV: "
+                f"CSV: "
                 f"{current_batch_filename}"
             )
 
             print(
-                f"Failed profile log: "
+                f"Failed profiles: "
                 f"{failed_profiles_file}"
             )
 
             print(
-                f"Page discovery log: "
+                f"Page discovery: "
                 f"{page_discovered_urls_file}"
             )
 
-            print(
-                "=" * 70
-            )
+            print("=" * 70)
 
 
 except KeyboardInterrupt:
 
-    print()
     print(
-        "[WARN] Keyboard interrupt received. "
-        "Saving current state..."
+        "\n🛑 Keyboard interrupt."
     )
 
     save_state(
         page,
         phase=current_phase,
-        consecutive_fails=consecutive_fails
+        consecutive_fails=(
+            consecutive_fails
+        )
     )
 
     try:
+
         with open(
             CONTINUE_FLAG_FILE,
             "w",
             encoding="utf-8"
         ) as f:
+
             f.write(
                 "CONTINUE_REQUIRED"
             )
+
     except Exception:
         pass
 
 
 except Exception as e:
 
-    print()
     print(
-        f"[CRITICAL] Global pipeline failure: "
-        f"{e}"
+        f"\n💀 GLOBAL ERROR: {e}"
     )
 
     save_state(
         page,
         phase=current_phase,
-        consecutive_fails=consecutive_fails
+        consecutive_fails=(
+            consecutive_fails
+        )
     )
 
     try:
+
         with open(
             CONTINUE_FLAG_FILE,
             "w",
             encoding="utf-8"
         ) as f:
+
             f.write(
                 "CONTINUE_REQUIRED"
             )
+
     except Exception:
         pass
 
@@ -2384,9 +2272,9 @@ finally:
 
     print()
     print(
-        "[INFO] WebDriver closed."
+        "🛑 Chrome closed."
     )
 
     print(
-        "[INFO] Execution block concluded."
+        "🏁 Scraping session finished."
     )
