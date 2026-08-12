@@ -59,11 +59,12 @@ if os.path.exists(memory_file):
                 parsed_urls.add(url)
 print(f"[INFO] Initialized memory cache with {len(parsed_urls)} processed URLs.")
 
-def mark_as_parsed(url):
-    decoded_url = urllib.parse.unquote(url)
+def mark_as_parsed(raw_url):
+    decoded_url = urllib.parse.unquote(raw_url)
     parsed_urls.add(decoded_url)
+    parsed_urls.add(raw_url) # Кешираме и двата варианта за сигурност
     with open(memory_file, "a", encoding="utf-8") as f:
-        f.write(decoded_url + "\n")
+        f.write(decoded_url + "\n") # Записваме само красивата кирилица!
 
 # --- FAILED PAGES MANAGEMENT ---
 def load_failed_pages():
@@ -233,8 +234,6 @@ try:
                 
                 try:
                     driver.get(target_url)
-                    
-                    # ПЪРВО: Твърдо изчакване от 4 секунди за мазния AJAX да зареди каквото има!
                     time.sleep(4)
                     
                     if "404" in driver.title or "Страницата не е намерена" in driver.page_source:
@@ -251,7 +250,7 @@ try:
                          break
 
                     WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, "jet-listing-grid__item")))
-                    time.sleep(2)
+                    time.sleep(3) # Чакаме 3 секунди твърдо да се рендират всички карти
                     
                     cards = driver.find_elements(By.XPATH, "//div[contains(@class, 'jet-listing-grid__item')]")
                     if cards:
@@ -309,30 +308,36 @@ try:
                             doctors_on_page.append({
                                 "Име": name, 
                                 "RAW_URL": raw_url, 
-                                "URL": decoded_url, # Декодирано за CSV-то
+                                "URL": decoded_url, 
                                 "Описание (Лист)": "-"
                             })
                     except: continue
 
                 for doc in doctors_on_page:
-                    raw_url = doc.pop('RAW_URL') # Вадим суровия линк за браузъра
+                    raw_url = doc['RAW_URL']
                     decoded_url = doc['URL']
                     
                     if decoded_url in parsed_urls or raw_url in parsed_urls:
                         continue
                         
-                    # ТУК ЛОВИМ КРАШОВЕТЕ ВЪТРЕ В ПРОФИЛИТЕ
-                    try:
-                        full_data = scrape_inner_profile(raw_url, doc)
-                        save_single_record(full_data)
-                        mark_as_parsed(decoded_url)
-                    except WebDriverException as we:
-                        if "crashed" in str(we).lower() or "disconnected" in str(we).lower() or "out of memory" in str(we).lower():
-                            print(f"  [CRITICAL] Chrome crashed inside profile {decoded_url}! Rebooting WebDriver and skipping for now...")
-                            try: driver.quit()
-                            except: pass
-                            driver = create_driver()
-                            continue # Отиваме на следващия доктор, ТОЗИ НЕ ГО ЗАПИСВАМЕ КАТО ПРЕМИНАТ
+                    # НОВАТА МЕХАНИКА: Опитваме до 3 пъти да изстържем СЪЩИЯ доктор, ако крашне!
+                    for attempt in range(3):
+                        try:
+                            # Правим копие на doc, за да не се зацапа речника при retry
+                            basic_info = {"Име": doc["Име"], "URL": decoded_url, "Описание (Лист)": "-"}
+                            full_data = scrape_inner_profile(raw_url, basic_info)
+                            save_single_record(full_data)
+                            mark_as_parsed(raw_url)
+                            break # Успех, излизаме от retry цикъла за този доктор
+                        except WebDriverException as we:
+                            if "crashed" in str(we).lower() or "disconnected" in str(we).lower() or "out of memory" in str(we).lower():
+                                print(f"  [CRITICAL] Chrome crashed inside profile {decoded_url}! Rebooting and retrying (Attempt {attempt+1}/3)...")
+                                try: driver.quit()
+                                except: pass
+                                driver = create_driver()
+                                time.sleep(2)
+                            else:
+                                break # Друга грешка, прескачаме го
 
             page += 1
             save_state(page, phase=1, consecutive_fails=consecutive_fails)
@@ -373,7 +378,7 @@ try:
                          break
 
                     WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, "jet-listing-grid__item")))
-                    time.sleep(2)
+                    time.sleep(3)
                     
                     cards = driver.find_elements(By.XPATH, "//div[contains(@class, 'jet-listing-grid__item')]")
                     if cards:
@@ -415,24 +420,29 @@ try:
                     except: continue
 
                 for doc in doctors_on_page:
-                    raw_url = doc.pop('RAW_URL')
+                    raw_url = doc['RAW_URL']
                     decoded_url = doc['URL']
                     
                     if decoded_url in parsed_urls or raw_url in parsed_urls:
                         continue
                         
-                    # СЪЩАТА ЗАЩИТА СРЕЩУ КРАШ И ТУК
-                    try:
-                        full_data = scrape_inner_profile(raw_url, doc)
-                        save_single_record(full_data)
-                        mark_as_parsed(decoded_url)
-                    except WebDriverException as we:
-                        if "crashed" in str(we).lower() or "disconnected" in str(we).lower() or "out of memory" in str(we).lower():
-                            print(f"  [CRITICAL] Chrome crashed inside profile {decoded_url}! Rebooting WebDriver and skipping for now...")
-                            try: driver.quit()
-                            except: pass
-                            driver = create_driver()
-                            continue
+                    # СЪЩАТА ЗАЩИТА СРЕЩУ КРАШ И ТУК ВЪВ ФАЗА 2
+                    for attempt in range(3):
+                        try:
+                            basic_info = {"Име": doc["Име"], "URL": decoded_url, "Описание (Лист)": "-"}
+                            full_data = scrape_inner_profile(raw_url, basic_info)
+                            save_single_record(full_data)
+                            mark_as_parsed(raw_url)
+                            break 
+                        except WebDriverException as we:
+                            if "crashed" in str(we).lower() or "disconnected" in str(we).lower() or "out of memory" in str(we).lower():
+                                print(f"  [CRITICAL] Chrome crashed inside profile {decoded_url}! Rebooting and retrying (Attempt {attempt+1}/3)...")
+                                try: driver.quit()
+                                except: pass
+                                driver = create_driver()
+                                time.sleep(2)
+                            else:
+                                break
 
             failed_pages.pop(0)
             save_failed_pages(failed_pages)
