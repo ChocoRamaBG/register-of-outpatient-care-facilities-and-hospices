@@ -53,9 +53,18 @@ jobs:
             git add -f zdraven_arhiv_outputs/savegame_zdraven_arhiv.json
           fi
 
-          # ДОБАВЕНО: Запазване на черния списък с пропуснатите страници
           if [ -f "zdraven_arhiv_outputs/failed_pages_zdraven_arhiv.json" ]; then
             git add -f zdraven_arhiv_outputs/failed_pages_zdraven_arhiv.json
+          fi
+
+          # NEW: Keep track of failed profiles between runs
+          if [ -f "zdraven_arhiv_outputs/failed_profiles_zdraven_arhiv.json" ]; then
+            git add -f zdraven_arhiv_outputs/failed_profiles_zdraven_arhiv.json
+          fi
+
+          # NEW: Keep track of discovered URLs log between runs
+          if [ -f "zdraven_arhiv_outputs/page_discovered_urls.json" ]; then
+            git add -f zdraven_arhiv_outputs/page_discovered_urls.json
           fi
           
           if [ -f "zdraven_arhiv_outputs/zdraven_arhiv_data_mega.csv" ]; then
