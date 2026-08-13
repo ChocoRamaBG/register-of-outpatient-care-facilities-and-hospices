@@ -739,6 +739,54 @@ def build_page_url(page):
 
 
 # ============================================================
+# JETENGINE EMPTY-PAGE DETECTION
+# ============================================================
+
+def page_has_no_data():
+    """
+    Detect JetEngine's real end-of-pagination response.
+
+    On the final page the site renders a .jet-listing-not-found
+    element containing the text "No data was found" instead of
+    normal .jet-listing-grid__item cards.
+    """
+
+    try:
+        elements = driver.find_elements(
+            By.CLASS_NAME,
+            "jet-listing-not-found"
+        )
+
+        for element in elements:
+            try:
+                if not element.is_displayed():
+                    continue
+
+                text = (element.text or "").strip().lower()
+
+                if "no data was found" in text:
+                    return True
+
+            except Exception:
+                continue
+
+        # Fallback in case the element is present in the DOM but
+        # Selenium does not consider it displayed.
+        source = (driver.page_source or "").lower()
+
+        if (
+            "jet-listing-not-found" in source
+            and "no data was found" in source
+        ):
+            return True
+
+    except Exception:
+        pass
+
+    return False
+
+
+# ============================================================
 # EXACT OLD PAGE PARSING LOGIC
 # ============================================================
 #
@@ -784,7 +832,7 @@ def parse_listing_page(page):
     )
 
     # --------------------------------------------------------
-    # 404 detection
+    # END-OF-DATABASE DETECTION
     # --------------------------------------------------------
 
     try:
@@ -795,7 +843,7 @@ def parse_listing_page(page):
         ):
 
             print(
-                "⛔ 404 detected."
+                "⛔ 404 detected. End of database."
             )
 
             return {
@@ -810,7 +858,8 @@ def parse_listing_page(page):
         ):
 
             print(
-                "⛔ 'Страницата не е намерена' detected."
+                "⛔ 'Страницата не е намерена' detected. "
+                "End of database."
             )
 
             return {
@@ -819,8 +868,26 @@ def parse_listing_page(page):
                 "cards": []
             }
 
-    except Exception:
-        pass
+        # JetEngine's actual empty-state response on the
+        # first page beyond the end of the dataset.
+        if page_has_no_data():
+
+            print(
+                "🏁 JetEngine returned 'No data was found'. "
+                "End of database."
+            )
+
+            return {
+                "status": "END",
+                "doctors": [],
+                "cards": []
+            }
+
+    except Exception as e:
+
+        print(
+            f"⚠️ End-of-page detection error: {e}"
+        )
 
     # --------------------------------------------------------
     # Wait exactly like old scraper
@@ -862,6 +929,21 @@ def parse_listing_page(page):
         "//div[contains(@class, "
         "'jet-listing-grid__item')]"
     )
+
+    # Safety check: JetEngine can render the empty-state after
+    # the initial checks above, so catch it here too.
+    if not cards and page_has_no_data():
+
+        print(
+            "🏁 Empty JetEngine listing detected after card lookup. "
+            "End of database."
+        )
+
+        return {
+            "status": "END",
+            "doctors": [],
+            "cards": []
+        }
 
     if not cards:
 
