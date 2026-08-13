@@ -89,33 +89,40 @@ def time_limit_reached():
 
 
 # ============================================================
-# STATE
+# STATE (UPDATED FOR MULTI-PASS)
 # ============================================================
 
 state = {
     "page": 1,
-    "phase": 1,
+    "pass_number": 1,
+    "new_docs_in_current_pass": 0,
     "consecutive_fails": 0
 }
 
 if os.path.exists(state_file):
     try:
         with open(state_file, "r", encoding="utf-8") as f:
-            state = json.load(f)
+            loaded_state = json.load(f)
+            # Safely load state, providing defaults if upgrading from old save file
+            state["page"] = loaded_state.get("page", 1)
+            state["pass_number"] = loaded_state.get("pass_number", 1)
+            state["new_docs_in_current_pass"] = loaded_state.get("new_docs_in_current_pass", 0)
+            state["consecutive_fails"] = loaded_state.get("consecutive_fails", 0)
+            
         print(
-            f"[INFO] Resuming from "
-            f"Phase {state.get('phase', 1)}, "
-            f"Page {state.get('page', 1)}."
+            f"[INFO] Resuming from Pass {state['pass_number']}, "
+            f"Page {state['page']}. "
+            f"(Found {state['new_docs_in_current_pass']} new docs this pass so far)."
         )
     except Exception as e:
         print(f"[WARN] State file could not be loaded: {e}")
-        state = {"page": 1, "phase": 1, "consecutive_fails": 0}
 
-def save_state(page, phase=1, consecutive_fails=0):
+def save_state():
     payload = {
-        "page": page,
-        "phase": phase,
-        "consecutive_fails": consecutive_fails,
+        "page": state["page"],
+        "pass_number": state["pass_number"],
+        "new_docs_in_current_pass": state["new_docs_in_current_pass"],
+        "consecutive_fails": state["consecutive_fails"],
         "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
     temp_file = state_file + ".tmp"
@@ -407,7 +414,7 @@ def page_has_no_data():
     return False
 
 # ============================================================
-# EXACT OLD PAGE PARSING LOGIC - PLAYWRIGHT
+# EXACT OLD PAGE PARSING LOGIC - PLAYWRIGHT (UPDATED FIX)
 # ============================================================
 
 def parse_listing_page(page_num):
@@ -446,13 +453,24 @@ def parse_listing_page(page_num):
         print(f"⚠️ End-of-page detection error: {e}")
 
     # --------------------------------------------------------
-    # Wait exactly like old scraper
+    # Wait exactly like old scraper (WITH STABILIZATION FIX)
     # --------------------------------------------------------
     try:
+        # Wait for the first card to appear
         driver_page.wait_for_selector(
             ".jet-listing-grid__item", 
             timeout=wait_time * 1000
         )
+        
+        # Let the DOM stabilize (wait until JetEngine finishes injecting all cards)
+        prev_count = 0
+        for _ in range(10): # Wait up to 5 seconds for the grid to finish rendering
+            time.sleep(0.5)
+            curr_count = driver_page.locator(".jet-listing-grid__item").count()
+            if curr_count > 0 and curr_count == prev_count:
+                break # Count stabilized!
+            prev_count = curr_count
+            
     except PlaywrightTimeoutError:
         print(f"⛔ No listing cards appeared within {wait_time} seconds.")
         return {"status": "FAILED", "doctors": [], "cards": []}
@@ -718,9 +736,6 @@ def scrape_inner_profile(url, basic_info):
 
 
 # ============================================================
-# MAIN EXECUTION LOOP
-# ============================================================
-# ============================================================
 # GITHUB ACTIONS FLAG MANAGEMENT
 # ============================================================
 def flag_for_continuation():
@@ -740,10 +755,10 @@ def clear_continuation_flag():
             pass
 
 # ============================================================
-# MAIN EXECUTION LOOP
+# MAIN EXECUTION LOOP (UPDATED FOR MULTI-PASS)
 # ============================================================
 def main():
-    print("[INFO] Scraper Started.")
+    print(f"[INFO] Scraper Started. Currently on PASS {state['pass_number']}")
     clear_continuation_flag() # Ensure we start fresh
     
     while True:
@@ -758,9 +773,20 @@ def main():
         result = parse_listing_page(current_page)
         
         if result["status"] == "END":
-            print(f"🎉 Scraping complete! Reached the end at page {current_page}.")
-            clear_continuation_flag()
-            break
+            # MULTI-PASS LOGIC HERE
+            if state["new_docs_in_current_pass"] > 0:
+                print(f"🔄 Reached end of Pass {state['pass_number']} but found {state['new_docs_in_current_pass']} new doctors.")
+                print("🔄 Resetting to Page 1 for another pass to catch missing data...")
+                
+                state["page"] = 1
+                state["pass_number"] += 1
+                state["new_docs_in_current_pass"] = 0
+                save_state()
+                continue # Go back to the top of the loop (Page 1)
+            else:
+                print(f"🎉 Scraping 100% complete! Pass {state['pass_number']} yielded 0 new doctors.")
+                clear_continuation_flag()
+                break # We are truly done!
             
         elif result["status"] == "FAILED":
             state["consecutive_fails"] += 1
@@ -772,7 +798,7 @@ def main():
                 state["page"] += 1
                 state["consecutive_fails"] = 0
             
-            save_state(state["page"], state["phase"], state["consecutive_fails"])
+            save_state()
             restart_driver()
             time.sleep(RETRY_DELAY_SECONDS)
             continue
@@ -800,18 +826,17 @@ def main():
             
             if success:
                 mark_as_parsed(doc_url)
+                state["new_docs_in_current_pass"] += 1 # WE FOUND A NEW DOCTOR!
             else:
                 add_failed_profile(doctor["Име"], doc_url, current_page)
         
         # If we hit the time limit, DO NOT increment the page. 
-        # On the next run, it will reload the same page, skip the already 
-        # parsed doctors, and continue exactly where it left off.
         if time_limit_hit_in_profiles:
             break
             
         # Proceed to next page ONLY if we successfully finished this page
         state["page"] += 1
-        save_state(state["page"], state["phase"], state["consecutive_fails"])
+        save_state()
 
     # Cleanup
     close_driver()
