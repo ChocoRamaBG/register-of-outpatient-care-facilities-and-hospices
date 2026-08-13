@@ -720,12 +720,36 @@ def scrape_inner_profile(url, basic_info):
 # ============================================================
 # MAIN EXECUTION LOOP
 # ============================================================
+# ============================================================
+# GITHUB ACTIONS FLAG MANAGEMENT
+# ============================================================
+def flag_for_continuation():
+    """Creates the flag file so GitHub Actions knows to restart."""
+    try:
+        with open(CONTINUE_FLAG_FILE, 'w') as f:
+            f.write("CONTINUE")
+    except Exception as e:
+        print(f"[ERROR] Could not write continue flag: {e}")
+
+def clear_continuation_flag():
+    """Removes the flag file if it exists (for clean completion)."""
+    if os.path.exists(CONTINUE_FLAG_FILE):
+        try:
+            os.remove(CONTINUE_FLAG_FILE)
+        except Exception:
+            pass
+
+# ============================================================
+# MAIN EXECUTION LOOP
+# ============================================================
 def main():
     print("[INFO] Scraper Started.")
+    clear_continuation_flag() # Ensure we start fresh
     
     while True:
         if time_limit_reached():
-            print("[INFO] Time limit reached. Shutting down gracefully.")
+            print("[INFO] Time limit reached. Triggering continue flag and shutting down.")
+            flag_for_continuation()
             break
             
         current_page = state["page"]
@@ -735,6 +759,7 @@ def main():
         
         if result["status"] == "END":
             print(f"🎉 Scraping complete! Reached the end at page {current_page}.")
+            clear_continuation_flag()
             break
             
         elif result["status"] == "FAILED":
@@ -755,11 +780,14 @@ def main():
         # Success state on listing page
         state["consecutive_fails"] = 0
         doctors = result.get("doctors", [])
+        time_limit_hit_in_profiles = False
         
         # Scrape Individual Profiles
         for doctor in doctors:
             if time_limit_reached():
-                print("[INFO] Time limit reached during profile loop.")
+                print("[INFO] Time limit reached during profile loop. Triggering continue flag.")
+                flag_for_continuation()
+                time_limit_hit_in_profiles = True
                 break
                 
             doc_url = doctor["URL"]
@@ -775,7 +803,13 @@ def main():
             else:
                 add_failed_profile(doctor["Име"], doc_url, current_page)
         
-        # Proceed to next page
+        # If we hit the time limit, DO NOT increment the page. 
+        # On the next run, it will reload the same page, skip the already 
+        # parsed doctors, and continue exactly where it left off.
+        if time_limit_hit_in_profiles:
+            break
+            
+        # Proceed to next page ONLY if we successfully finished this page
         state["page"] += 1
         save_state(state["page"], state["phase"], state["consecutive_fails"])
 
