@@ -37,7 +37,7 @@ jobs:
           playwright install chromium --with-deps
 
       - name: Execute Autonomous Deep Scrape
-        run: python framar_scraper.py
+        run: python scraper_framar.py
 
       - name: Commit Progress Tracker and Data
         run: |
