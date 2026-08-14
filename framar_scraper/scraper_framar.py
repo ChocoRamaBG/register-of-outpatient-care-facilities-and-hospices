@@ -182,7 +182,7 @@ driver_page = create_driver()
 # ============================================================
 def decline_cookies():
     try:
-        driver_page.locator("button.cky-btn-reject").click(timeout=5000)
+        driver_page.locator("button.cky-btn-reject").first.click(timeout=5000)
     except PlaywrightTimeoutError:
         pass
 
