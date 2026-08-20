@@ -45,7 +45,7 @@ def clear_continuation_flag():
         except:
             pass
 
-state = {"current_index": 0} # Препоръчително е ръчно да го смениш в json файла на 100000000
+state = {"current_index": 0}
 if os.path.exists(state_file):
     try:
         with open(state_file, "r", encoding="utf-8") as f:
@@ -128,7 +128,6 @@ def main():
             uic_str = f"{i:09d}"
             state['current_index'] = i
             
-            # Лог на всеки 500 номера, за да се следи прогреса в GitHub Actions
             if i % 500 == 0:
                 print(f"[PROGRESS] Currently parsing checking up to UIC: {uic_str}...", flush=True)
             
@@ -160,10 +159,10 @@ def main():
                 other_data = {}
 
                 if heading_title_loc.count() > 0:
-                    row_data["Заглавие (Статус)"] = heading_title_loc.inner_text().strip()
+                    row_data["Заглавие (Статус)"] = heading_title_loc.first.inner_text().strip()
 
                 if heading_subtitle_loc.count() > 0:
-                    subtitle_text = heading_subtitle_loc.inner_text().strip()
+                    subtitle_text = heading_subtitle_loc.first.inner_text().strip()
                     if "състояние към дата:" in subtitle_text:
                         row_data["Състояние към дата"] = subtitle_text.split("състояние към дата:")[-1].strip()
                     else:
@@ -176,8 +175,12 @@ def main():
                     text_loc = container.locator('.field-text')
 
                     if title_loc.count() > 0 and text_loc.count() > 0:
-                        raw_title = title_loc.inner_text().strip()
-                        raw_text = text_loc.inner_text().strip()
+                        raw_title = title_loc.first.inner_text().strip()
+                        
+                        # Fix strict mode violation by extracting all text elements in the container
+                        text_elements = text_loc.all()
+                        raw_text = "\n".join([el.inner_text().strip() for el in text_elements if el.inner_text().strip()])
+                        
                         mapped_title = label_map.get(raw_title, raw_title)
                         
                         if mapped_title == "1. ЕИК/ПИК":
