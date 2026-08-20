@@ -35,8 +35,8 @@ def flag_for_continuation():
     try:
         with open(CONTINUE_FLAG_FILE, 'w') as f:
             f.write("CONTINUE")
-    except Exception as e:
-        print(f"[ERROR] Could not write continue flag: {e}")
+    except Exception:
+        pass
 
 def clear_continuation_flag():
     if os.path.exists(CONTINUE_FLAG_FILE):
@@ -45,7 +45,7 @@ def clear_continuation_flag():
         except:
             pass
 
-state = {"current_index": 0}
+state = {"current_index": 0} # Препоръчително е ръчно да го смениш в json файла на 100000000
 if os.path.exists(state_file):
     try:
         with open(state_file, "r", encoding="utf-8") as f:
@@ -84,7 +84,7 @@ def main():
     base_url = "https://portal.registryagency.bg/CR/Reports/ActiveConditionTabResult?uic="
     
     processed_uics = load_memory()
-    print(f"[INFO] Resuming from UIC index {state['current_index']}. Cached: {len(processed_uics)}")
+    print(f"[INFO] Resuming from UIC index {state['current_index']}. Cached: {len(processed_uics)}", flush=True)
 
     fieldnames = [
         "UIC_Query", "URL", "Заглавие (Статус)", "Състояние към дата",
@@ -121,12 +121,16 @@ def main():
 
         for i in range(state['current_index'], 10000000000):
             if time_limit_reached():
-                print("[INFO] Time limit reached. Triggering continue flag.")
+                print("[INFO] Time limit reached. Triggering continue flag.", flush=True)
                 flag_for_continuation()
                 break
 
             uic_str = f"{i:09d}"
             state['current_index'] = i
+            
+            # Лог на всеки 500 номера, за да се следи прогреса в GitHub Actions
+            if i % 500 == 0:
+                print(f"[PROGRESS] Currently parsing checking up to UIC: {uic_str}...", flush=True)
             
             if uic_str in processed_uics:
                 save_state(i + 1)
@@ -217,10 +221,10 @@ def main():
 
                 save_to_memory(uic_str)
                 processed_uics.add(uic_str)
-                print(f"[{uic_str}] Data extracted successfully.")
+                print(f"[{uic_str}] Data extracted successfully.", flush=True)
 
             except Exception as e:
-                print(f"[{uic_str}] Timeout or processing error: {e}")
+                print(f"[{uic_str}] Timeout or processing error: {e}", flush=True)
 
             save_state(i + 1)
         
