@@ -16,7 +16,9 @@ from playwright.sync_api import (
 START_TIME = time.time()
 TIME_LIMIT_SECONDS = 5.4 * 60 * 60  # ~5 часа и 24 минути
 
-BASE_URL = "https://spravochnik.framar.bg/%D0%B7%D0%B4%D1%80%D0%B0%D0%B2%D0%BD%D0%B8-%D0%B7%D0%B0%D0%B2%D0%B5%D0%B4%D0%B5%D0%BD%D0%B8%D1%8F"
+# Забележка: В оригиналния ви GitHub скрипт URL адресът беше за "здравни заведения".
+# За да съвпада с данните за лекари, го промених на съответния линк от работещия скрипт.
+BASE_URL = "https://spravochnik.framar.bg/%D0%BC%D0%B5%D0%B4%D0%B8%D1%86%D0%B8%D0%BD%D1%81%D0%BA%D0%B8-%D1%81%D0%BF%D0%B5%D1%86%D0%B8%D0%B0%D0%BB%D0%B8%D1%81%D1%82%D0%B8"
 
 MAX_PAGE_RETRIES = 3
 RETRY_DELAY_SECONDS = 2
@@ -25,18 +27,19 @@ RETRY_DELAY_SECONDS = 2
 # ПЪТИЩА И ДИРЕКТОРИИ
 # ============================================================
 try:
-    base_dir = os.path.dirname(os.path.abspath(__file__))
+    output_dir = os.path.dirname(os.path.abspath(__file__))
 except NameError:
-    base_dir = os.getcwd()
+    output_dir = os.getcwd()
 
-output_dir = os.path.join(base_dir, "framar_outputs")
+# Добавена е подпапка за запазване на чистотата в основната директория
+output_dir = os.path.join(output_dir, "framar_outputs")
 os.makedirs(output_dir, exist_ok=True)
 
 state_file = os.path.join(output_dir, "savegame_framar.json")
 memory_file = os.path.join(output_dir, "parsed_urls_framar.txt")
 failed_pages_file = os.path.join(output_dir, "failed_pages_framar.json")
 failed_profiles_file = os.path.join(output_dir, "failed_profiles_framar.json")
-csv_file_path = os.path.join(output_dir, "framar_doctors_full.csv")
+csv_file_path = os.path.join(output_dir, "framar_doctors_full_playwright.csv")
 CONTINUE_FLAG_FILE = os.path.join(output_dir, "CONTINUE_FLAG_FRAMAR")
 
 # ============================================================
@@ -187,7 +190,6 @@ def decline_cookies():
         pass
 
 def scrape_regions():
-    """Извлича всички регионални линкове от началната страница."""
     print("[INFO] Извличане на региони...")
     driver_page.goto(BASE_URL)
     decline_cookies()
@@ -203,7 +205,7 @@ def scrape_regions():
     print(f"[INFO] Открити {len(regions)} региона.")
 
 # ============================================================
-# ЕКСТРАКЦИЯ НА ПРОФИЛ (БЪРЗ DOM ПАРСИНГ ЧРЕЗ JS)
+# ЕКСТРАКЦИЯ НА ПРОФИЛ (БЪРЗ DOM ПАРСИНГ)
 # ============================================================
 def extract_doctor_details(url):
     try:
@@ -222,19 +224,23 @@ def extract_doctor_details(url):
     }
 
     try:
-        details["Name"] = driver_page.locator("h1").first.inner_text().strip()
+        name_loc = driver_page.locator("h1").first
+        if name_loc.count() > 0:
+            details["Name"] = name_loc.inner_text().strip()
     except: pass
 
     try:
-        rating_el = driver_page.locator("div#rate span.fl").first
-        if rating_el.count() > 0:
-            details["Rating"] = rating_el.inner_text().strip()
+        rating_elements = driver_page.locator("span.fl").all_inner_texts()
+        for text in rating_elements:
+            if "оценки" in text or "/" in text:
+                details["Rating"] = text.strip()
+                break
     except: pass
 
     try:
-        time_el = driver_page.locator("time.subheader.last").first
-        if time_el.count() > 0:
-            details["Dates"] = time_el.inner_text().strip()
+        time_tag = driver_page.locator("time.subheader.last").first
+        if time_tag.count() > 0:
+            details["Dates"] = time_tag.inner_text().strip()
     except: pass
 
     try:
@@ -242,71 +248,18 @@ def extract_doctor_details(url):
         details["Path"] = " > ".join([c.strip() for c in crumbs if c.strip().lower() != "назад"])
     except: pass
 
-    # Оптимизирано извличане на инфо блоковете чрез JS
-    info_data = driver_page.evaluate("""() => {
-        const children = Array.from(document.querySelectorAll("#info > *"));
-        return children.map(el => ({
-            tag: el.tagName.toLowerCase(),
-            text: el.innerText.trim(),
-            has_strong: el.querySelector("strong") !== null || el.querySelector("b") !== null
-        }));
-    }""")
-
-    current_section = None
-    section_texts = {"Education": [], "Experience": [], "Qualifications": [], "Memberships": [], "Additional": []}
-
-    for item in info_data:
-        tag = item["tag"]
-        text = item["text"]
-        t_lower = text.lower()
-
-        if not text:
-            continue
-
-        is_header = False
-        if tag in ["h2", "h3"] or (tag == "p" and len(text) < 60 and (text.endswith(":") or item["has_strong"])):
-            if "образование" in t_lower:
-                current_section = "Education"
-                is_header = True
-            elif "професионален" in t_lower or "опит" in t_lower or "път" in t_lower:
-                current_section = "Experience"
-                is_header = True
-            elif "квалификаци" in t_lower or "курс" in t_lower:
-                current_section = "Qualifications"
-                is_header = True
-            elif "членств" in t_lower:
-                current_section = "Memberships"
-                is_header = True
-
-        if is_header:
-            continue
-
-        if tag == "p":
-            if text.startswith("Специалист:"): details["Specialty"] = text.replace("Специалист:", "").strip()
-            elif text.startswith("Населено място:"): details["Region"] = text.replace("Населено място:", "").strip()
-            elif text.startswith("Адрес:"): details["Address"] = text.replace("Адрес:", "").strip()
-            elif text.startswith("Телефон:"): details["Phone"] = text.replace("Телефон:", "").strip()
-            elif text.startswith("E-mail:"): details["Email"] = text.replace("E-mail:", "").strip()
-            elif text.startswith("Сайт:"): details["Website"] = text.replace("Сайт:", "").strip()
-            elif text.startswith("Още информация:"):
-                current_section = "Additional"
-                rem = text.replace("Още информация:", "").strip()
-                if rem: section_texts[current_section].append(rem)
-            else:
-                target_sec = current_section if current_section else "Additional"
-                section_texts[target_sec].append(text)
-                current_section = target_sec
-
-        elif tag in ["ul", "ol", "div"]:
-            target_sec = current_section if current_section else "Additional"
-            section_texts[target_sec].append(text)
-            current_section = target_sec
-
-    details["Education"] = "\n".join(section_texts["Education"]).strip() or "N/A"
-    details["Experience"] = "\n".join(section_texts["Experience"]).strip() or "N/A"
-    details["Qualifications"] = "\n".join(section_texts["Qualifications"]).strip() or "N/A"
-    details["Memberships"] = "\n".join(section_texts["Memberships"]).strip() or "N/A"
-    details["Additional_Info"] = "\n".join(section_texts["Additional"]).strip() or "N/A"
+    try:
+        info_elements = driver_page.locator("#info p").all_inner_texts()
+        for text in info_elements:
+            text = text.strip()
+            if "Специалист:" in text: details["Specialty"] = text.replace("Специалист:", "").strip()
+            elif "Населено място:" in text: details["Region"] = text.replace("Населено място:", "").strip()
+            elif "Адрес:" in text: details["Address"] = text.replace("Адрес:", "").strip()
+            elif "Телефон:" in text: details["Phone"] = text.replace("Телефон:", "").strip()
+            elif "E-mail:" in text: details["Email"] = text.replace("E-mail:", "").strip()
+            elif "Сайт:" in text: details["Website"] = text.replace("Сайт:", "").strip()
+    except Exception as e:
+        print(f"[ERROR] Грешка при парсване на инфо секцията за {url}: {e}")
 
     return details
 
@@ -360,7 +313,6 @@ def main():
 
         state["consecutive_fails"] = 0
 
-        # Извличане на линкове
         doc_links = driver_page.locator("article.item h2.header a").all()
         doctor_urls = [el.get_attribute("href") for el in doc_links if el.get_attribute("href")]
 
@@ -381,7 +333,6 @@ def main():
             continue
 
         state["previous_first_doc"] = doctor_urls[0]
-        
         time_limit_hit_in_profiles = False
 
         for doc_url in doctor_urls:
@@ -413,7 +364,7 @@ def main():
 
     close_driver()
     if state["region_index"] >= total_regions:
-        print("\n🎉 Обхождането на всички региони приключи успешно!")
+        print("\n[INFO] Обхождането на всички региони приключи успешно!")
 
 if __name__ == "__main__":
     try:
