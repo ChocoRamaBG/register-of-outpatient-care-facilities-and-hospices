@@ -39,7 +39,7 @@ state_file = os.path.join(output_dir, "savegame_framar.json")
 memory_file = os.path.join(output_dir, "parsed_urls_framar.txt")
 failed_pages_file = os.path.join(output_dir, "failed_pages_framar.json")
 failed_profiles_file = os.path.join(output_dir, "failed_profiles_framar.json")
-csv_file_path = os.path.join(output_dir, "framar_doctors_full_playwright.csv")
+csv_file_path = os.path.join(output_dir, "framar_doctors_full.csv")
 CONTINUE_FLAG_FILE = os.path.join(output_dir, "CONTINUE_FLAG_FRAMAR")
 
 # ============================================================
