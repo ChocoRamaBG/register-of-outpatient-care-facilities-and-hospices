@@ -1,4 +1,4 @@
-name: "(registry agency) Autonomous Scraper"
+name: "(Registry Agency) Autonomous Scraper"
 
 on:
   workflow_dispatch:
@@ -37,7 +37,7 @@ jobs:
           playwright install chromium --with-deps
 
       - name: Execute Autonomous Deep Scrape
-        run: python scraper_registry_agency.py
+        run: python -u scraper_registry_agency.py
 
       - name: Commit Progress Tracker and Data
         run: |
