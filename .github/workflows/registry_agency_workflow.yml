@@ -1,4 +1,4 @@
-name: "(Registry Agency) Autonomous Scraper"
+name: "(registry_agency) Autonomous Scraper"
 
 on:
   workflow_dispatch:
