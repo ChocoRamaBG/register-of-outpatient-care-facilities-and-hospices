@@ -16,8 +16,6 @@ from playwright.sync_api import (
 START_TIME = time.time()
 TIME_LIMIT_SECONDS = 5.4 * 60 * 60  # ~5 часа и 24 минути
 
-# Забележка: В оригиналния ви GitHub скрипт URL адресът беше за "здравни заведения".
-# За да съвпада с данните за лекари, го промених на съответния линк от работещия скрипт.
 BASE_URL = "https://spravochnik.framar.bg/%D0%BC%D0%B5%D0%B4%D0%B8%D1%86%D0%B8%D0%BD%D1%81%D0%BA%D0%B8-%D1%81%D0%BF%D0%B5%D1%86%D0%B8%D0%B0%D0%BB%D0%B8%D1%81%D1%82%D0%B8"
 
 MAX_PAGE_RETRIES = 3
@@ -118,8 +116,11 @@ def mark_as_parsed(url):
 def add_failed_profile(url, region, page, error_msg=""):
     profiles = []
     if os.path.exists(failed_profiles_file):
-        with open(failed_profiles_file, "r", encoding="utf-8") as f:
-            profiles = json.load(f)
+        try:
+            with open(failed_profiles_file, "r", encoding="utf-8") as f:
+                profiles = json.load(f)
+        except json.JSONDecodeError:
+            pass
     profiles.append({
         "URL": unquote(url),
         "Region_Index": region,
@@ -129,6 +130,53 @@ def add_failed_profile(url, region, page, error_msg=""):
     })
     with open(failed_profiles_file, "w", encoding="utf-8") as f:
         json.dump(profiles, f, ensure_ascii=False, indent=2)
+
+def retry_failed_profiles():
+    if not os.path.exists(failed_profiles_file):
+        return False
+        
+    try:
+        with open(failed_profiles_file, "r", encoding="utf-8") as f:
+            failed_profiles = json.load(f)
+    except Exception:
+        return False
+
+    if not failed_profiles:
+        return False
+
+    print(f"\n[INFO] Опит за възстановяване на {len(failed_profiles)} неуспешни профила...")
+    still_failed = []
+    time_limit_hit = False
+
+    for profile in failed_profiles:
+        if time_limit_hit or time_limit_reached():
+            if not time_limit_hit:
+                print("[INFO] Лимитът на времето е достигнат по време на възстановяването на профили.")
+                flag_for_continuation()
+                time_limit_hit = True
+            still_failed.append(profile)
+            continue
+            
+        url = profile["URL"]
+        if unquote(url) in parsed_urls or url in parsed_urls:
+            continue
+
+        details = extract_doctor_details(url)
+        if details:
+            with open(csv_file_path, mode="a", encoding="utf-8-sig", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writerow(details)
+            
+            mark_as_parsed(url)
+            print(f"  [+] Възстановен и записан: {details['Name']} | {unquote(url)}")
+        else:
+            profile["Timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            still_failed.append(profile)
+
+    with open(failed_profiles_file, "w", encoding="utf-8") as f:
+        json.dump(still_failed, f, ensure_ascii=False, indent=2)
+
+    return time_limit_hit
 
 # ============================================================
 # PLAYWRIGHT ИНСТАНЦИЯ
@@ -277,6 +325,11 @@ def clear_continuation_flag():
 def main():
     global driver_page
     clear_continuation_flag()
+
+    # Retry previously failed profiles first before starting new scraping operations
+    if retry_failed_profiles():
+        close_driver()
+        return
 
     if not state["regions"]:
         scrape_regions()
