@@ -65,18 +65,25 @@ def clear_continuation_flag():
         except:
             pass
 
-state = {"current_index": 0}
+# Глобален state, който помни Фаза 1 (priority_index) и Фаза 2 (current_index)
+state = {
+    "priority_index": 0,
+    "current_index": 0
+}
+
 if os.path.exists(state_file):
     try:
         with open(state_file, "r", encoding="utf-8") as f:
             loaded_state = json.load(f)
+            state["priority_index"] = loaded_state.get("priority_index", 0)
             state["current_index"] = loaded_state.get("current_index", 0)
     except Exception:
         pass
 
-def save_state(index_val):
+def save_state():
     payload = {
-        "current_index": index_val,
+        "priority_index": state["priority_index"],
+        "current_index": state["current_index"],
         "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
     temp_file = state_file + ".tmp"
@@ -258,16 +265,21 @@ def main():
         # ========================================================
         # ФАЗА 1: Приоритетен списък + Съседни ЕИК номера (Квартал)
         # ========================================================
-        if priority_uics:
-            print("[INFO] Starting PHASE 1: Priority List & Neighborhood scanning...", flush=True)
-            for base_uic in priority_uics:
+        if priority_uics and state["priority_index"] < len(priority_uics):
+            print(f"[INFO] Starting PHASE 1: Priority List & Neighborhood scanning (from index {state['priority_index']})...", flush=True)
+            
+            for idx in range(state["priority_index"], len(priority_uics)):
+                base_uic = priority_uics[idx]
+                
                 if time_limit_reached():
                     print("[INFO] Time limit reached during Phase 1.", flush=True)
+                    state["priority_index"] = idx
+                    save_state()
                     flag_for_continuation()
                     browser.close()
                     return
 
-                # Генерираме "Квартала": +/- 30 номера около базовия
+                # Генерираме "Квартала": базовия номер + 30 надолу и 30 нагоре
                 base_num = int(base_uic)
                 neighborhood = []
                 for n in range(max(0, base_num - 30), base_num + 31):
@@ -280,25 +292,36 @@ def main():
                         continue
                     
                     if time_limit_reached():
+                        state["priority_index"] = idx
+                        save_state()
                         flag_for_continuation()
                         browser.close()
                         return
                         
                     scrape_company(neighbor_uic, page, base_url, processed_uics, csv_args)
+                    
+                # Запазваме прогреса на всеки изчистен базов номер
+                state["priority_index"] = idx + 1
+                save_state()
+
+        # Когато приключим изцяло с Фаза 1, маркираме я като приключена
+        if priority_uics:
+            state["priority_index"] = len(priority_uics)
+            save_state()
 
         # ========================================================
-        # ФАЗА 2: Класически последователен скенер
+        # ФАЗА 2: Класически последователен скенер (Брутфорс)
         # ========================================================
-        print("[INFO] Starting PHASE 2: Sequential scanning...", flush=True)
+        print(f"[INFO] Starting PHASE 2: Sequential scanning (from UIC {state['current_index']:09d})...", flush=True)
         for i in range(state['current_index'], 10000000000):
             if time_limit_reached():
                 print("[INFO] Time limit reached in Phase 2.", flush=True)
-                save_state(i)
+                state["current_index"] = i
+                save_state()
                 flag_for_continuation()
                 break
 
             uic_str = f"{i:09d}"
-            state['current_index'] = i
             
             # Включваме Модул 11 филтъра и тук, за да е бързо!
             if not is_valid_eik(uic_str):
@@ -310,11 +333,14 @@ def main():
                 print(f"[PROGRESS] Checking valid sequential UIC: {uic_str}...", flush=True)
             
             if uic_str in processed_uics:
-                save_state(i + 1)
+                state["current_index"] = i + 1
+                save_state()
                 continue
 
             scrape_company(uic_str, page, base_url, processed_uics, csv_args)
-            save_state(i + 1)
+            
+            state["current_index"] = i + 1
+            save_state()
         
         browser.close()
 
