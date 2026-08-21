@@ -30,10 +30,11 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install Dependencies
+      - name: Install Dependencies & Playwright Browsers
         run: |
           python -m pip install --upgrade pip
-          pip install requests
+          pip install playwright
+          playwright install chromium --with-deps
 
       - name: Execute Autonomous Deep Scrape
         run: python -u scraper_registry_agency.py
@@ -70,7 +71,7 @@ jobs:
         run: |
           if [ -f "registry_agency_outputs/CONTINUE_FLAG_REGISTRY_AGENCY" ]; then
             echo "Continue flag detected. Script hit time limit. Triggering next workflow run..."
-            gh workflow run "(registry_agency) Autonomous Scraper"
+            gh workflow run "(Registry Agency) Autonomous Scraper"
           else
             echo "No continue flag detected. Scraping is 100% complete."
           fi
