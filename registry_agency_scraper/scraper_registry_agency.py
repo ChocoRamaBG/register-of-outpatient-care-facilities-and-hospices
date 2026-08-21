@@ -28,6 +28,30 @@ memory_file_path = os.path.join(output_dir, 'processed_uics_registry.txt')
 state_file = os.path.join(output_dir, "savegame_registry_agency.json")
 CONTINUE_FLAG_FILE = os.path.join(output_dir, "CONTINUE_FLAG_REGISTRY_AGENCY")
 
+# ==========================================
+# МОДУЛ 11 ЦЕДКА ЗА ВАЛИДЕН ЕИК (БУЛСТАТ)
+# ==========================================
+def is_valid_eik(eik: str) -> bool:
+    if len(eik) != 9 or not eik.isdigit():
+        return False
+    
+    weights1 = [1, 2, 3, 4, 5, 6, 7, 8]
+    sum1 = sum(int(eik[i]) * weights1[i] for i in range(8))
+    rem1 = sum1 % 11
+    
+    if rem1 != 10:
+        return rem1 == int(eik[8])
+        
+    weights2 = [3, 4, 5, 6, 7, 8, 9, 10]
+    sum2 = sum(int(eik[i]) * weights2[i] for i in range(8))
+    rem2 = sum2 % 11
+    
+    if rem2 != 10:
+        return rem2 == int(eik[8])
+        
+    return int(eik[8]) == 0
+# ==========================================
+
 def time_limit_reached():
     return (time.time() - START_TIME) >= TIME_LIMIT_SECONDS
 
@@ -119,17 +143,26 @@ def main():
         )
         page = context.new_page()
 
+        valid_counter = 0
+
         for i in range(state['current_index'], 10000000000):
+            uic_str = f"{i:09d}"
+            
+            # ЦЕДКАТА: Прескача 90% от числата моментално, ако не отговарят на формулата.
+            if not is_valid_eik(uic_str):
+                continue
+                
             if time_limit_reached():
                 print("[INFO] Time limit reached. Triggering continue flag.", flush=True)
+                save_state(i)
                 flag_for_continuation()
                 break
-
-            uic_str = f"{i:09d}"
+                
             state['current_index'] = i
+            valid_counter += 1
             
-            if i % 500 == 0:
-                print(f"[PROGRESS] Currently parsing checking up to UIC: {uic_str}...", flush=True)
+            if valid_counter % 100 == 0:
+                print(f"[PROGRESS] Checking valid UIC: {uic_str}...", flush=True)
             
             if uic_str in processed_uics:
                 save_state(i + 1)
@@ -177,7 +210,6 @@ def main():
                     if title_loc.count() > 0 and text_loc.count() > 0:
                         raw_title = title_loc.first.inner_text().strip()
                         
-                        # Fix strict mode violation by extracting all text elements in the container
                         text_elements = text_loc.all()
                         raw_text = "\n".join([el.inner_text().strip() for el in text_elements if el.inner_text().strip()])
                         
