@@ -27,6 +27,26 @@ csv_file_path = os.path.join(output_dir, 'registry_agency_data_mega.csv')
 memory_file_path = os.path.join(output_dir, 'processed_uics_registry.txt')
 state_file = os.path.join(output_dir, "savegame_registry_agency.json")
 CONTINUE_FLAG_FILE = os.path.join(output_dir, "CONTINUE_FLAG_REGISTRY_AGENCY")
+PRIORITY_LIST_FILE = os.path.join(output_dir, "100_percent_valid_uics.txt")
+
+# ==========================================
+# МОДУЛ 11 ЦЕДКА ЗА ВАЛИДЕН ЕИК (БУЛСТАТ)
+# ==========================================
+def is_valid_eik(eik: str) -> bool:
+    if len(eik) != 9 or not eik.isdigit():
+        return False
+    weights1 = [1, 2, 3, 4, 5, 6, 7, 8]
+    sum1 = sum(int(eik[i]) * weights1[i] for i in range(8))
+    rem1 = sum1 % 11
+    if rem1 != 10:
+        return rem1 == int(eik[8])
+    weights2 = [3, 4, 5, 6, 7, 8, 9, 10]
+    sum2 = sum(int(eik[i]) * weights2[i] for i in range(8))
+    rem2 = sum2 % 11
+    if rem2 != 10:
+        return rem2 == int(eik[8])
+    return int(eik[8]) == 0
+# ==========================================
 
 def time_limit_reached():
     return (time.time() - START_TIME) >= TIME_LIMIT_SECONDS
@@ -79,12 +99,116 @@ def save_to_memory(uic_str):
     with open(memory_file_path, 'a', encoding='utf-8') as f:
         f.write(f"{uic_str}\n")
 
+# ==========================================
+# ИЗНЕСЕНА ЛОГИКА ЗА СКРЕЙПВАНЕ
+# ==========================================
+def scrape_company(uic_str, page, base_url, processed_uics, csv_writer_args):
+    """Скрейпва даден ЕИК, ако вече не е обработен."""
+    if uic_str in processed_uics:
+        return True
+
+    target_url = f"{base_url}{uic_str}"
+    fieldnames, label_map = csv_writer_args
+
+    try:
+        page.goto(target_url, wait_until='domcontentloaded', timeout=15000)
+        
+        try:
+            page.wait_for_selector('.page-heading', timeout=1500)
+        except Exception:
+            pass
+
+        field_containers = page.locator('.field-container')
+        heading_title_loc = page.locator('.page-heading-title')
+        heading_subtitle_loc = page.locator('.page-heading-sub-title')
+
+        if heading_title_loc.count() == 0 and field_containers.count() == 0:
+            save_to_memory(uic_str)
+            processed_uics.add(uic_str)
+            return True
+
+        row_data = {"UIC_Query": uic_str, "URL": target_url}
+        other_data = {}
+
+        if heading_title_loc.count() > 0:
+            row_data["Заглавие (Статус)"] = heading_title_loc.first.inner_text().strip()
+
+        if heading_subtitle_loc.count() > 0:
+            subtitle_text = heading_subtitle_loc.first.inner_text().strip()
+            if "състояние към дата:" in subtitle_text:
+                row_data["Състояние към дата"] = subtitle_text.split("състояние към дата:")[-1].strip()
+            else:
+                row_data["Състояние към дата"] = subtitle_text
+
+        count = field_containers.count()
+        for j in range(count):
+            container = field_containers.nth(j)
+            title_loc = container.locator('.field-title')
+            text_loc = container.locator('.field-text')
+
+            if title_loc.count() > 0 and text_loc.count() > 0:
+                raw_title = title_loc.first.inner_text().strip()
+                
+                text_elements = text_loc.all()
+                raw_text = "\n".join([el.inner_text().strip() for el in text_elements if el.inner_text().strip()])
+                
+                mapped_title = label_map.get(raw_title, raw_title)
+                
+                if mapped_title == "1. ЕИК/ПИК":
+                    lines = [line.strip() for line in raw_text.split('\n') if line.strip()]
+                    if lines:
+                        row_data["ЕИК/ПИК"] = lines[0]
+                    if len(lines) > 1 and "Фирмено дело:" in lines[1]:
+                        row_data["Фирмено дело"] = lines[1].replace("Фирмено дело:", "").strip()
+                elif mapped_title == "2. Фирма/Наименование":
+                    row_data["Фирма/Наименование"] = raw_text
+                elif mapped_title == "3. Правна форма":
+                    row_data["Правна форма"] = raw_text
+                elif mapped_title == "5. Седалище и адрес на управление":
+                    lines = [line.strip() for line in raw_text.split('\n') if line.strip()]
+                    address_parts = []
+                    for line in lines:
+                        if line.startswith("Държава:"):
+                            row_data["Държава"] = line.replace("Държава:", "").strip()
+                        elif line.startswith("Област:"):
+                            row_data["Област и Община"] = line.strip()
+                        elif line.startswith("Населено място:"):
+                            row_data["Населено място"] = line.replace("Населено място:", "").strip()
+                        else:
+                            address_parts.append(line.strip())
+                    if address_parts:
+                        row_data["Адрес"] = ", ".join(address_parts)
+                elif mapped_title == "6. Предмет на дейност":
+                    row_data["Предмет на дейност"] = raw_text
+                elif mapped_title == "18. Физическо лице - търговец":
+                    parts = raw_text.split(', Държава:')
+                    row_data["Физическо лице"] = parts[0].strip()
+                else:
+                    other_data[raw_title] = raw_text
+
+        if other_data:
+            row_data["Other_Data"] = json.dumps(other_data, ensure_ascii=False)
+
+        with open(csv_file_path, mode='a', newline='', encoding='utf-8-sig') as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
+            writer.writerow(row_data)
+
+        save_to_memory(uic_str)
+        processed_uics.add(uic_str)
+        print(f"[{uic_str}] Data extracted successfully.", flush=True)
+        return True
+
+    except Exception as e:
+        print(f"[{uic_str}] Timeout or processing error: {e}", flush=True)
+        return False
+
+
 def main():
     clear_continuation_flag()
     base_url = "https://portal.registryagency.bg/CR/Reports/ActiveConditionTabResult?uic="
     
     processed_uics = load_memory()
-    print(f"[INFO] Resuming from UIC index {state['current_index']}. Cached: {len(processed_uics)}", flush=True)
+    print(f"[INFO] Resuming... Cached records: {len(processed_uics)}", flush=True)
 
     fieldnames = [
         "UIC_Query", "URL", "Заглавие (Статус)", "Състояние към дата",
@@ -107,6 +231,18 @@ def main():
             writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
             writer.writeheader()
 
+    csv_args = (fieldnames, label_map)
+
+    # Зареждаме приоритетния списък (ако го има)
+    priority_uics = []
+    if os.path.exists(PRIORITY_LIST_FILE):
+        with open(PRIORITY_LIST_FILE, 'r', encoding='utf-8') as f:
+            for line in f:
+                val = line.strip()
+                if val:
+                    priority_uics.append(val)
+        print(f"[INFO] Loaded {len(priority_uics)} UICs from priority list.")
+
     with sync_playwright() as p:
         browser = p.chromium.launch(
             headless=True,
@@ -119,116 +255,65 @@ def main():
         )
         page = context.new_page()
 
+        # ========================================================
+        # ФАЗА 1: Приоритетен списък + Съседни ЕИК номера (Квартал)
+        # ========================================================
+        if priority_uics:
+            print("[INFO] Starting PHASE 1: Priority List & Neighborhood scanning...", flush=True)
+            for base_uic in priority_uics:
+                if time_limit_reached():
+                    print("[INFO] Time limit reached during Phase 1.", flush=True)
+                    flag_for_continuation()
+                    browser.close()
+                    return
+
+                # Генерираме "Квартала": +/- 30 номера около базовия
+                base_num = int(base_uic)
+                neighborhood = []
+                for n in range(max(0, base_num - 30), base_num + 31):
+                    n_str = f"{n:09d}"
+                    if is_valid_eik(n_str):
+                        neighborhood.append(n_str)
+                
+                for neighbor_uic in neighborhood:
+                    if neighbor_uic in processed_uics:
+                        continue
+                    
+                    if time_limit_reached():
+                        flag_for_continuation()
+                        browser.close()
+                        return
+                        
+                    scrape_company(neighbor_uic, page, base_url, processed_uics, csv_args)
+
+        # ========================================================
+        # ФАЗА 2: Класически последователен скенер
+        # ========================================================
+        print("[INFO] Starting PHASE 2: Sequential scanning...", flush=True)
         for i in range(state['current_index'], 10000000000):
             if time_limit_reached():
-                print("[INFO] Time limit reached. Triggering continue flag.", flush=True)
+                print("[INFO] Time limit reached in Phase 2.", flush=True)
+                save_state(i)
                 flag_for_continuation()
                 break
 
             uic_str = f"{i:09d}"
             state['current_index'] = i
             
-            if i % 500 == 0:
-                print(f"[PROGRESS] Currently parsing checking up to UIC: {uic_str}...", flush=True)
+            # Включваме Модул 11 филтъра и тук, за да е бързо!
+            if not is_valid_eik(uic_str):
+                if i % 500 == 0:
+                    print(f"[PROGRESS] Checking sequentially up to: {uic_str}...", flush=True)
+                continue
+            
+            if i % 100 == 0:
+                print(f"[PROGRESS] Checking valid sequential UIC: {uic_str}...", flush=True)
             
             if uic_str in processed_uics:
                 save_state(i + 1)
                 continue
 
-            target_url = f"{base_url}{uic_str}"
-
-            try:
-                page.goto(target_url, wait_until='domcontentloaded', timeout=15000)
-                
-                try:
-                    page.wait_for_selector('.page-heading', timeout=1500)
-                except Exception:
-                    pass
-
-                field_containers = page.locator('.field-container')
-                heading_title_loc = page.locator('.page-heading-title')
-                heading_subtitle_loc = page.locator('.page-heading-sub-title')
-
-                if heading_title_loc.count() == 0 and field_containers.count() == 0:
-                    save_to_memory(uic_str)
-                    processed_uics.add(uic_str)
-                    save_state(i + 1)
-                    continue
-
-                row_data = {"UIC_Query": uic_str, "URL": target_url}
-                other_data = {}
-
-                if heading_title_loc.count() > 0:
-                    row_data["Заглавие (Статус)"] = heading_title_loc.first.inner_text().strip()
-
-                if heading_subtitle_loc.count() > 0:
-                    subtitle_text = heading_subtitle_loc.first.inner_text().strip()
-                    if "състояние към дата:" in subtitle_text:
-                        row_data["Състояние към дата"] = subtitle_text.split("състояние към дата:")[-1].strip()
-                    else:
-                        row_data["Състояние към дата"] = subtitle_text
-
-                count = field_containers.count()
-                for j in range(count):
-                    container = field_containers.nth(j)
-                    title_loc = container.locator('.field-title')
-                    text_loc = container.locator('.field-text')
-
-                    if title_loc.count() > 0 and text_loc.count() > 0:
-                        raw_title = title_loc.first.inner_text().strip()
-                        
-                        # Fix strict mode violation by extracting all text elements in the container
-                        text_elements = text_loc.all()
-                        raw_text = "\n".join([el.inner_text().strip() for el in text_elements if el.inner_text().strip()])
-                        
-                        mapped_title = label_map.get(raw_title, raw_title)
-                        
-                        if mapped_title == "1. ЕИК/ПИК":
-                            lines = [line.strip() for line in raw_text.split('\n') if line.strip()]
-                            if lines:
-                                row_data["ЕИК/ПИК"] = lines[0]
-                            if len(lines) > 1 and "Фирмено дело:" in lines[1]:
-                                row_data["Фирмено дело"] = lines[1].replace("Фирмено дело:", "").strip()
-                        elif mapped_title == "2. Фирма/Наименование":
-                            row_data["Фирма/Наименование"] = raw_text
-                        elif mapped_title == "3. Правна форма":
-                            row_data["Правна форма"] = raw_text
-                        elif mapped_title == "5. Седалище и адрес на управление":
-                            lines = [line.strip() for line in raw_text.split('\n') if line.strip()]
-                            address_parts = []
-                            for line in lines:
-                                if line.startswith("Държава:"):
-                                    row_data["Държава"] = line.replace("Държава:", "").strip()
-                                elif line.startswith("Област:"):
-                                    row_data["Област и Община"] = line.strip()
-                                elif line.startswith("Населено място:"):
-                                    row_data["Населено място"] = line.replace("Населено място:", "").strip()
-                                else:
-                                    address_parts.append(line.strip())
-                            if address_parts:
-                                row_data["Адрес"] = ", ".join(address_parts)
-                        elif mapped_title == "6. Предмет на дейност":
-                            row_data["Предмет на дейност"] = raw_text
-                        elif mapped_title == "18. Физическо лице - търговец":
-                            parts = raw_text.split(', Държава:')
-                            row_data["Физическо лице"] = parts[0].strip()
-                        else:
-                            other_data[raw_title] = raw_text
-
-                if other_data:
-                    row_data["Other_Data"] = json.dumps(other_data, ensure_ascii=False)
-
-                with open(csv_file_path, mode='a', newline='', encoding='utf-8-sig') as f:
-                    writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
-                    writer.writerow(row_data)
-
-                save_to_memory(uic_str)
-                processed_uics.add(uic_str)
-                print(f"[{uic_str}] Data extracted successfully.", flush=True)
-
-            except Exception as e:
-                print(f"[{uic_str}] Timeout or processing error: {e}", flush=True)
-
+            scrape_company(uic_str, page, base_url, processed_uics, csv_args)
             save_state(i + 1)
         
         browser.close()
