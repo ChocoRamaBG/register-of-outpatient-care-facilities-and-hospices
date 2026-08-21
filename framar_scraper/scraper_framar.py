@@ -29,7 +29,6 @@ try:
 except NameError:
     output_dir = os.getcwd()
 
-# Добавена е подпапка за запазване на чистотата в основната директория
 output_dir = os.path.join(output_dir, "framar_outputs")
 os.makedirs(output_dir, exist_ok=True)
 
@@ -199,7 +198,7 @@ def create_driver():
         viewport={'width': 1920, 'height': 1080},
         user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     )
-    # Блокиране на изображения и стилове за по-бързо зареждане
+    # Блокиране на изображения и стилове
     _context.route("**/*.{png,jpg,jpeg,webp,svg,css,woff,woff2}", lambda route: route.abort())
     
     _page = _context.new_page()
@@ -253,7 +252,7 @@ def scrape_regions():
     print(f"[INFO] Открити {len(regions)} региона.")
 
 # ============================================================
-# ЕКСТРАКЦИЯ НА ПРОФИЛ (БЪРЗ DOM ПАРСИНГ)
+# ЕКСТРАКЦИЯ НА ПРОФИЛ
 # ============================================================
 def extract_doctor_details(url):
     try:
@@ -263,12 +262,14 @@ def extract_doctor_details(url):
         return None
 
     decoded_url = unquote(url)
+    
+    # Празни стрингове вместо "N/A"
     details = {
-        "Name": "N/A", "Specialty": "N/A", "Region": "N/A", "Address": "N/A", 
-        "Phone": "N/A", "Email": "N/A", "Website": "N/A", "Dates": "N/A", 
-        "Rating": "N/A", "Education": "N/A", "Experience": "N/A",
-        "Qualifications": "N/A", "Memberships": "N/A", "Additional_Info": "N/A",
-        "Path": "N/A", "Source_URL": decoded_url
+        "Name": "", "Specialty": "", "Region": "", "Address": "", 
+        "Phone": "", "Email": "", "Website": "", "Dates": "", 
+        "Rating": "", "Education": "", "Experience": "",
+        "Qualifications": "", "Memberships": "", "Additional_Info": "",
+        "Path": "", "Source_URL": decoded_url
     }
 
     try:
@@ -296,16 +297,73 @@ def extract_doctor_details(url):
         details["Path"] = " > ".join([c.strip() for c in crumbs if c.strip().lower() != "назад"])
     except: pass
 
+    # DOM State Machine парсинг на обогатените данни
     try:
-        info_elements = driver_page.locator("#info p").all_inner_texts()
-        for text in info_elements:
-            text = text.strip()
-            if "Специалист:" in text: details["Specialty"] = text.replace("Специалист:", "").strip()
-            elif "Населено място:" in text: details["Region"] = text.replace("Населено място:", "").strip()
-            elif "Адрес:" in text: details["Address"] = text.replace("Адрес:", "").strip()
-            elif "Телефон:" in text: details["Phone"] = text.replace("Телефон:", "").strip()
-            elif "E-mail:" in text: details["Email"] = text.replace("E-mail:", "").strip()
-            elif "Сайт:" in text: details["Website"] = text.replace("Сайт:", "").strip()
+        info_loc = driver_page.locator("#info").first
+        if info_loc.count() > 0:
+            info_text = info_loc.inner_text()
+            lines = info_text.split('\n')
+            current_section = None
+            
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                    
+                lower_line = line.lower()
+                
+                # Основна информация
+                if line.startswith("Специалист:"):
+                    details["Specialty"] = line.replace("Специалист:", "").strip()
+                    current_section = None
+                elif line.startswith("Населено място:"):
+                    details["Region"] = line.replace("Населено място:", "").strip()
+                    current_section = None
+                elif line.startswith("Адрес:"):
+                    details["Address"] = line.replace("Адрес:", "").strip()
+                    current_section = None
+                elif line.startswith("Телефон:"):
+                    details["Phone"] = line.replace("Телефон:", "").strip()
+                    current_section = None
+                elif line.startswith("E-mail:"):
+                    details["Email"] = line.replace("E-mail:", "").strip()
+                    current_section = None
+                elif line.startswith("Сайт:"):
+                    details["Website"] = line.replace("Сайт:", "").strip()
+                    current_section = None
+                    
+                # Обогатени полета
+                elif lower_line.startswith("образование"):
+                    current_section = "Education"
+                    content = line.split(":", 1)[-1].strip()
+                    if content: details[current_section] += (" | " + content if details[current_section] else content)
+                
+                elif "професионален път" in lower_line or "трудов стаж" in lower_line or "опит" == lower_line.replace(":", ""):
+                    current_section = "Experience"
+                    content = line.split(":", 1)[-1].strip()
+                    if content: details[current_section] += (" | " + content if details[current_section] else content)
+                    
+                elif "квалификаци" in lower_line:
+                    current_section = "Qualifications"
+                    content = line.split(":", 1)[-1].strip()
+                    if content: details[current_section] += (" | " + content if details[current_section] else content)
+                    
+                elif "членств" in lower_line:
+                    current_section = "Memberships"
+                    content = line.split(":", 1)[-1].strip()
+                    if content: details[current_section] += (" | " + content if details[current_section] else content)
+                    
+                elif "научни интереси" in lower_line or "допълнителна информаци" in lower_line or lower_line.startswith("още информация"):
+                    current_section = "Additional_Info"
+                    content = line.split(":", 1)[-1].strip()
+                    if content: details[current_section] += (" | " + content if details[current_section] else content)
+                    
+                elif current_section:
+                    # Игнориране на излишния форум спам в съдържанието
+                    if "Тук можете да зададете своите въпроси" in line or ("Д-р" in line and "консултант" in line and "Форум" in line):
+                        continue
+                        
+                    details[current_section] += (" | " + line if details[current_section] else line)
     except Exception as e:
         print(f"[ERROR] Грешка при парсване на инфо секцията за {url}: {e}")
 
@@ -326,7 +384,6 @@ def main():
     global driver_page
     clear_continuation_flag()
 
-    # Retry previously failed profiles first before starting new scraping operations
     if retry_failed_profiles():
         close_driver()
         return
