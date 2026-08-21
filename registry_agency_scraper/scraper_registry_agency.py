@@ -29,6 +29,11 @@ state_file = os.path.join(output_dir, "savegame_registry_agency.json")
 CONTINUE_FLAG_FILE = os.path.join(output_dir, "CONTINUE_FLAG_REGISTRY_AGENCY")
 PRIORITY_LIST_FILE = os.path.join(output_dir, "100_percent_valid_uics.txt")
 
+def log_msg(msg):
+    """Помощна функция за красиво принтиране с точен час."""
+    current_time = datetime.now().strftime('%H:%M:%S')
+    print(f"[{current_time}] {msg}", flush=True)
+
 # ==========================================
 # МОДУЛ 11 ЦЕДКА ЗА ВАЛИДЕН ЕИК (БУЛСТАТ)
 # ==========================================
@@ -65,7 +70,6 @@ def clear_continuation_flag():
         except:
             pass
 
-# Глобален state, който помни Фаза 1 (priority_index) и Фаза 2 (current_index)
 state = {
     "priority_index": 0,
     "current_index": 0
@@ -110,9 +114,9 @@ def save_to_memory(uic_str):
 # ИЗНЕСЕНА ЛОГИКА ЗА СКРЕЙПВАНЕ
 # ==========================================
 def scrape_company(uic_str, page, base_url, processed_uics, csv_writer_args):
-    """Скрейпва даден ЕИК, ако вече не е обработен."""
+    """Скрейпва даден ЕИК. Връща (статус, име_на_фирма_или_грешка)."""
     if uic_str in processed_uics:
-        return True
+        return "SKIPPED", ""
 
     target_url = f"{base_url}{uic_str}"
     fieldnames, label_map = csv_writer_args
@@ -129,10 +133,11 @@ def scrape_company(uic_str, page, base_url, processed_uics, csv_writer_args):
         heading_title_loc = page.locator('.page-heading-title')
         heading_subtitle_loc = page.locator('.page-heading-sub-title')
 
+        # Ако страницата е празна (няма такава фирма)
         if heading_title_loc.count() == 0 and field_containers.count() == 0:
             save_to_memory(uic_str)
             processed_uics.add(uic_str)
-            return True
+            return "EMPTY", ""
 
         row_data = {"UIC_Query": uic_str, "URL": target_url}
         other_data = {}
@@ -202,12 +207,13 @@ def scrape_company(uic_str, page, base_url, processed_uics, csv_writer_args):
 
         save_to_memory(uic_str)
         processed_uics.add(uic_str)
-        print(f"[{uic_str}] Data extracted successfully.", flush=True)
-        return True
+        
+        # Опитваме се да извадим името за лога
+        company_name = row_data.get("Заглавие (Статус)", row_data.get("Фирма/Наименование", "Неизвестно име"))
+        return "SUCCESS", company_name
 
     except Exception as e:
-        print(f"[{uic_str}] Timeout or processing error: {e}", flush=True)
-        return False
+        return "ERROR", str(e)
 
 
 def main():
@@ -215,7 +221,9 @@ def main():
     base_url = "https://portal.registryagency.bg/CR/Reports/ActiveConditionTabResult?uic="
     
     processed_uics = load_memory()
-    print(f"[INFO] Resuming... Cached records: {len(processed_uics)}", flush=True)
+    log_msg(f"[СТАРТ] Възстановяване на сесията... Кеширани записи до момента: {len(processed_uics)}")
+
+    session_extracted_count = 0  # Брояч за текущата сесия (колко НОВИ сме източили сега)
 
     fieldnames = [
         "UIC_Query", "URL", "Заглавие (Статус)", "Състояние към дата",
@@ -248,7 +256,7 @@ def main():
                 val = line.strip()
                 if val:
                     priority_uics.append(val)
-        print(f"[INFO] Loaded {len(priority_uics)} UICs from priority list.")
+        log_msg(f"[ИНФО] Зареден списък с {len(priority_uics)} гарантирани ЕИК номера.")
 
     with sync_playwright() as p:
         browser = p.chromium.launch(
@@ -266,13 +274,13 @@ def main():
         # ФАЗА 1: Приоритетен списък + Съседни ЕИК номера (Квартал)
         # ========================================================
         if priority_uics and state["priority_index"] < len(priority_uics):
-            print(f"[INFO] Starting PHASE 1: Priority List & Neighborhood scanning (from index {state['priority_index']})...", flush=True)
+            log_msg(f"[ФАЗА 1] Старт на Квартално сканиране (започваме от индекс {state['priority_index']} / {len(priority_uics)})...")
             
             for idx in range(state["priority_index"], len(priority_uics)):
                 base_uic = priority_uics[idx]
                 
                 if time_limit_reached():
-                    print("[INFO] Time limit reached during Phase 1.", flush=True)
+                    log_msg(f"[ВРЕМЕТО ИЗТЕЧЕ] Спираме Фаза 1. Общо източени нови фирми тази сесия: {session_extracted_count}")
                     state["priority_index"] = idx
                     save_state()
                     flag_for_continuation()
@@ -287,18 +295,35 @@ def main():
                     if is_valid_eik(n_str):
                         neighborhood.append(n_str)
                 
+                scraped_count = 0
+                empty_count = 0
+                skipped_count = 0
+
+                log_msg(f"[КВАРТАЛ] Базов ЕИК: {base_uic} | Валидни съседи за проверка: {len(neighborhood)}")
+                
                 for neighbor_uic in neighborhood:
-                    if neighbor_uic in processed_uics:
-                        continue
-                    
                     if time_limit_reached():
+                        log_msg(f"[ВРЕМЕТО ИЗТЕЧЕ] Спираме Фаза 1. Общо източени нови фирми тази сесия: {session_extracted_count}")
                         state["priority_index"] = idx
                         save_state()
                         flag_for_continuation()
                         browser.close()
                         return
                         
-                    scrape_company(neighbor_uic, page, base_url, processed_uics, csv_args)
+                    status, name_or_err = scrape_company(neighbor_uic, page, base_url, processed_uics, csv_args)
+                    
+                    if status == "SUCCESS":
+                        scraped_count += 1
+                        session_extracted_count += 1
+                        log_msg(f"  -> [УСПЕХ] {neighbor_uic} : {name_or_err}")
+                    elif status == "EMPTY":
+                        empty_count += 1
+                    elif status == "SKIPPED":
+                        skipped_count += 1
+                    elif status == "ERROR":
+                        log_msg(f"  -> [ГРЕШКА] {neighbor_uic} : {name_or_err}")
+
+                log_msg(f"[РЕЗЮМЕ КВАРТАЛ] {base_uic} завършен. Нови: {scraped_count} | Празни: {empty_count} | Прескочени: {skipped_count}\n")
                     
                 # Запазваме прогреса на всеки изчистен базов номер
                 state["priority_index"] = idx + 1
@@ -312,10 +337,11 @@ def main():
         # ========================================================
         # ФАЗА 2: Класически последователен скенер (Брутфорс)
         # ========================================================
-        print(f"[INFO] Starting PHASE 2: Sequential scanning (from UIC {state['current_index']:09d})...", flush=True)
+        log_msg(f"[ФАЗА 2] Старт на последователно сканиране от ЕИК {state['current_index']:09d} нагоре...")
+        
         for i in range(state['current_index'], 10000000000):
             if time_limit_reached():
-                print("[INFO] Time limit reached in Phase 2.", flush=True)
+                log_msg(f"[ВРЕМЕТО ИЗТЕЧЕ] Спираме Фаза 2. Общо източени нови фирми тази сесия: {session_extracted_count}")
                 state["current_index"] = i
                 save_state()
                 flag_for_continuation()
@@ -323,26 +349,24 @@ def main():
 
             uic_str = f"{i:09d}"
             
-            # Включваме Модул 11 филтъра и тук, за да е бързо!
             if not is_valid_eik(uic_str):
-                if i % 500 == 0:
-                    print(f"[PROGRESS] Checking sequentially up to: {uic_str}...", flush=True)
+                if i % 1000 == 0:
+                    log_msg(f"[ТЪРСЕНЕ] Стигнахме до номер: {uic_str}...")
                 continue
             
-            if i % 100 == 0:
-                print(f"[PROGRESS] Checking valid sequential UIC: {uic_str}...", flush=True)
+            status, name_or_err = scrape_company(uic_str, page, base_url, processed_uics, csv_args)
             
-            if uic_str in processed_uics:
-                state["current_index"] = i + 1
-                save_state()
-                continue
+            if status == "SUCCESS":
+                session_extracted_count += 1
+                log_msg(f"[УСПЕХ ФАЗА 2] {uic_str} -> {name_or_err}")
+            elif status == "ERROR":
+                log_msg(f"[ГРЕШКА ФАЗА 2] {uic_str} -> {name_or_err}")
 
-            scrape_company(uic_str, page, base_url, processed_uics, csv_args)
-            
             state["current_index"] = i + 1
             save_state()
         
         browser.close()
+        log_msg(f"[КРАЙ] Скриптът приключи успешно. Общо източени нови фирми тази сесия: {session_extracted_count}")
 
 if __name__ == "__main__":
     main()
