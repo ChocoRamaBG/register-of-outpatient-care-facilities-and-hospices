@@ -10,9 +10,13 @@ permissions:
 jobs:
   run-scraper:
     runs-on: ubuntu-latest
+
+    # Важно:
+    # parser-ът сам трябва да спре по-рано от GitHub timeout-а.
+    timeout-minutes: 335
+
     defaults:
       run:
-        # Променено: Само името на папката вътре в хранилището
         working-directory: registry_agency_scraper
 
     steps:
@@ -30,27 +34,76 @@ jobs:
           pip install playwright
           playwright install chromium
 
-      - name: Run the UIC finder script
+      - name: Run UIC finder
         run: |
+          echo "=== RUN START ==="
+          date -u
+          python --version
           python eik_extractor.py
+          echo "=== RUN END ==="
+
+      - name: Show parser state
+        if: always()
+        run: |
+          echo "=== STATE ==="
+          if [ -f "registry_agency_outputs/savegame_uic_finder.json" ]; then
+            cat registry_agency_outputs/savegame_uic_finder.json
+          else
+            echo "No state file"
+          fi
+
+          echo
+          echo "=== HEARTBEAT ==="
+          if [ -f "registry_agency_outputs/diagnostics/heartbeat.json" ]; then
+            cat registry_agency_outputs/diagnostics/heartbeat.json
+          else
+            echo "No heartbeat file"
+          fi
+
+          echo
+          echo "=== LAST ERROR ==="
+          if [ -f "registry_agency_outputs/diagnostics/last_error.txt" ]; then
+            cat registry_agency_outputs/diagnostics/last_error.txt
+          else
+            echo "No last_error.txt"
+          fi
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: registry-agency-diagnostics
+          path: |
+            registry_agency_scraper/registry_agency_outputs/diagnostics/
+            registry_agency_scraper/registry_agency_outputs/savegame_uic_finder.json
+            registry_agency_scraper/registry_agency_outputs/failed_queries.txt
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Commit and Push state and outputs
+        if: always()
         run: |
           git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
           git add registry_agency_outputs/
-          
-          git commit -m "Auto-update: Добавени нови ЕИК номера и обновен прогрес" || echo "Няма нови промени за къмитване"
-          git push
+
+          if git diff --cached --quiet; then
+            echo "Няма промени за commit."
+          else
+            git commit -m "Auto-update: UIC progress and diagnostics"
+            git push
+          fi
 
       - name: Check for continuation flag and re-trigger
+        if: success()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ -f "registry_agency_outputs/CONTINUE_FLAG_UIC_FINDER" ]; then
-            echo "Времевият лимит беше достигнат. Рестартираме екшъна за продължаване..."
+            echo "Времевият лимит беше достигнат."
+            echo "Рестартираме workflow-а..."
             gh workflow run "(registry_agency) Data Filler"
           else
-            echo "Всички комбинации са приключени. Край на процеса."
+            echo "Всички комбинации са приключени."
           fi
