@@ -29,8 +29,7 @@ jobs:
 
       - name: Run the UIC finder script
         run: |
-          # ВАЖНО: Сменете 'your_script_name.py' с реалното име на вашия Python файл!
-          python your_script_name.py
+          python eik_extractor.py
 
       - name: Commit and Push state and outputs
         run: |
