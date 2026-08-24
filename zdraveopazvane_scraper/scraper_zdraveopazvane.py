@@ -254,18 +254,21 @@ def extract_doctor_details(url):
         if map_loc.count() > 0:
             href = map_loc.get_attribute("href")
             if href:
-                match = re.search(r'([-+]?\d*\.\d+),([-+]?\d*\.\d+)', href)
+                # Търсим две десетични числа, разделени от каквото и да е нечислово съдържание
+                match = re.search(r'([-+]?\d{2}\.\d+)[^\d]+([-+]?\d{2}\.\d+)', href)
                 if match:
                     details["Latitude"] = match.group(1)
                     details["Longitude"] = match.group(2)
-    except: pass
+    except: 
+        pass
 
     # Описание
     try:
         desc_loc = driver_page.locator(".txt_about_us").first
         if desc_loc.count() > 0:
             details["Описание"] = desc_loc.inner_text().strip().replace('\n', ' ')
-    except: pass
+    except: 
+        pass
 
     # Детайлни полета
     try:
@@ -282,7 +285,9 @@ def extract_doctor_details(url):
                     details["Адрес"] = v_text
                 elif "Телефони:" in c_text:
                     raw_p = v_text.replace(" ", "")
-                    if raw_p: details["Телефон"] = f"Number {raw_p}"
+                    if raw_p: 
+                        # Форматираме като текстова формула, за да форсираме Excel да запази нулата
+                        details["Телефон"] = f'="{raw_p}"'
                 elif "E-mail:" in c_text:
                     details["Имейл"] = v_text
                 elif "Отрасъл:" in c_text:
