@@ -1,0 +1,54 @@
+name: "(registry_agency) Filler"
+
+on:
+  # Позволява САМО ръчно стартиране на скрипта от бутон в GitHub UI
+  workflow_dispatch:
+
+permissions:
+  contents: write 
+  actions: write  
+
+jobs:
+  run-scraper:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install playwright
+          playwright install chromium
+
+      - name: Run the UIC finder script
+        run: |
+          # ВАЖНО: Сменете 'your_script_name.py' с реалното име на вашия Python файл!
+          python your_script_name.py
+
+      - name: Commit and Push state and outputs
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add registry_agency_outputs/
+          
+          git commit -m "Auto-update: Добавени нови ЕИК номера и обновен прогрес" || echo "Няма нови промени за къмитване"
+          git push
+
+      - name: Check for continuation flag and re-trigger
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -f "registry_agency_outputs/CONTINUE_FLAG_UIC_FINDER" ]; then
+            echo "Времевият лимит беше достигнат. Рестартираме екшъна за продължаване..."
+            gh workflow run "Registry Agency UIC Scraper"
+          else
+            echo "Всички комбинации са приключени. Край на процеса."
+          fi
