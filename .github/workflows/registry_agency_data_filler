@@ -1,4 +1,4 @@
-name: "(registry_agency) Filler"
+name: "(registry_agency) data_Filler"
 
 on:
   # Позволява САМО ръчно стартиране на скрипта от бутон в GitHub UI
