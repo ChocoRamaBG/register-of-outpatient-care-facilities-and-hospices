@@ -1,7 +1,6 @@
 name: "(registry_agency) Data Filler"
 
 on:
-  # Позволява САМО ръчно стартиране на скрипта от бутон в GitHub UI
   workflow_dispatch:
 
 permissions:
@@ -11,11 +10,10 @@ permissions:
 jobs:
   run-scraper:
     runs-on: ubuntu-latest
-    # Задаваме работната директория, за да може всички run команди
-    # автоматично да се изпълняват в папката на скрипта.
     defaults:
       run:
-        working-directory: register-of-outpatient-care-facilities-and-hospices/registry_agency_scraper
+        # Променено: Само името на папката вътре в хранилището
+        working-directory: registry_agency_scraper
 
     steps:
       - name: Checkout repository
@@ -41,7 +39,6 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Пътят е правилен, защото сме в директорията на скрипта
           git add registry_agency_outputs/
           
           git commit -m "Auto-update: Добавени нови ЕИК номера и обновен прогрес" || echo "Няма нови промени за къмитване"
@@ -53,7 +50,6 @@ jobs:
         run: |
           if [ -f "registry_agency_outputs/CONTINUE_FLAG_UIC_FINDER" ]; then
             echo "Времевият лимит беше достигнат. Рестартираме екшъна за продължаване..."
-            # Името тук трябва да съвпада точно с 'name:' стойността в началото на файла
             gh workflow run "(registry_agency) Data Filler"
           else
             echo "Всички комбинации са приключени. Край на процеса."
