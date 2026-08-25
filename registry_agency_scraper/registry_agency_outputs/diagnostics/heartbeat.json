@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-08-25T07:14:14.922166",
+  "elapsed_seconds": 420,
+  "query_idx": 1,
+  "query": "Б",
+  "page_num": 87,
+  "status": "clicking_next",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?count=3542&includeHistory=false&name=%D0%91&page=86&pageSize=25&selectedSearchFilter=1",
+  "total_uics": 279866,
+  "last_new_uics": 9
+}

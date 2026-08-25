@@ -1,0 +1,15 @@
+{
+  "query_idx": 1,
+  "query": "Б",
+  "page_num": 86,
+  "status": "page_complete",
+  "started_at": "2026-08-25T07:07:14.915281",
+  "last_activity": "2026-08-25T07:14:14.375687",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?count=3542&includeHistory=false&name=%D0%91&page=86&pageSize=25&selectedSearchFilter=1",
+  "total_uics": 279866,
+  "last_new_uics": 9,
+  "elapsed_seconds": 419,
+  "error": null,
+  "saved_at": "2026-08-25T07:14:14.375690",
+  "save_reason": "page_complete"
+}
