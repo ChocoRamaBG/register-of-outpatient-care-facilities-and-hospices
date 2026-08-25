@@ -1,0 +1,25 @@
+Timestamp: 2026-08-25T12:04:35.370375
+Label: query=ЕИ, retry=1
+Exception: RuntimeError('RATE_LIMIT')
+
+STATE:
+{
+  "query_idx": 416,
+  "query": "ЕИ",
+  "page_num": 0,
+  "status": "goto",
+  "started_at": "2026-08-25T07:07:14.915281",
+  "last_activity": "2026-08-25T12:04:33.863435",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%95%D0%98&selectedSearchFilter=1",
+  "total_uics": 298877,
+  "last_new_uics": 0,
+  "elapsed_seconds": 17351,
+  "error": null
+}
+
+TRACEBACK:
+Traceback (most recent call last):
+  File "/home/runner/work/register-of-outpatient-care-facilities-and-hospices/register-of-outpatient-care-facilities-and-hospices/registry_agency_scraper/eik_extractor.py", line 827, in main
+    raise RuntimeError(
+RuntimeError: RATE_LIMIT
+

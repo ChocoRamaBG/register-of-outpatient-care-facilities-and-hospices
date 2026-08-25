@@ -1,15 +1,15 @@
 {
-  "query_idx": 1,
-  "query": "Б",
-  "page_num": 86,
-  "status": "page_complete",
+  "query_idx": 437,
+  "query": "ЕЬ",
+  "page_num": 0,
+  "status": "atexit",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-08-25T07:14:14.375687",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?count=3542&includeHistory=false&name=%D0%91&page=86&pageSize=25&selectedSearchFilter=1",
-  "total_uics": 279866,
-  "last_new_uics": 9,
-  "elapsed_seconds": 419,
+  "last_activity": "2026-08-25T12:35:31.179978",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%95%D0%AC&selectedSearchFilter=1",
+  "total_uics": 298884,
+  "last_new_uics": 0,
+  "elapsed_seconds": 19209,
   "error": null,
-  "saved_at": "2026-08-25T07:14:14.375690",
-  "save_reason": "page_complete"
+  "saved_at": "2026-08-25T12:35:31.179984",
+  "save_reason": "atexit"
 }
