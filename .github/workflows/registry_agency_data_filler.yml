@@ -92,6 +92,8 @@ jobs:
             echo "Няма промени за commit."
           else
             git commit -m "Auto-update: UIC progress and diagnostics"
+            # Тука добавяме дърпането (rebase), за да не гърмим, ако вторият скрипт е push-нал междувременно!
+            git pull --rebase origin main
             git push
           fi
 
