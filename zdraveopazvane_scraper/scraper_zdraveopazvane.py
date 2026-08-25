@@ -250,17 +250,18 @@ def extract_doctor_details(url):
 
     # Координати
     try:
-        map_loc = driver_page.locator(".partitions_map_wrap a").first
+        # Добавяме [href] към CSS селектора, за да сме сигурни, че хващаме само тагове с реален линк
+        map_loc = driver_page.locator(".partitions_map_wrap a[href]").first
         if map_loc.count() > 0:
             href = map_loc.get_attribute("href")
             if href:
-                # Търсим две десетични числа, разделени от каквото и да е нечислово съдържание
-                match = re.search(r'([-+]?\d{2}\.\d+)[^\d]+([-+]?\d{2}\.\d+)', href)
+                # Използваме доказано работещия Regex от първия скрипт
+                match = re.search(r'([-+]?\d*\.\d+),([-+]?\d*\.\d+)', href)
                 if match:
                     details["Latitude"] = match.group(1)
                     details["Longitude"] = match.group(2)
-    except: 
-        pass
+    except Exception as e:
+        print(f"[ERROR] Грешка при извличане на координати за {url}: {e}")
 
     # Описание
     try:
