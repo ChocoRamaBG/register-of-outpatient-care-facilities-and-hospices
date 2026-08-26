@@ -1,15 +1,15 @@
 {
-  "query_idx": 4065,
-  "query": "0U",
+  "query_idx": 4692,
+  "query": "99",
   "page_num": 0,
   "status": "atexit",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-08-26T04:42:35.145685",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=0U&selectedSearchFilter=1",
-  "total_uics": 300938,
-  "last_new_uics": 1,
-  "elapsed_seconds": 19236,
+  "last_activity": "2026-08-26T08:44:46.121329",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=99&selectedSearchFilter=1",
+  "total_uics": 409847,
+  "last_new_uics": 20,
+  "elapsed_seconds": 14485,
   "error": null,
-  "saved_at": "2026-08-26T04:42:35.145691",
+  "saved_at": "2026-08-26T08:44:46.121335",
   "save_reason": "atexit"
 }
