@@ -1,15 +1,15 @@
 {
-  "query_idx": 2638,
-  "query": "FV",
+  "query_idx": 4065,
+  "query": "0U",
   "page_num": 0,
   "status": "atexit",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-08-25T23:21:13.245196",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=FV&selectedSearchFilter=1",
-  "total_uics": 300842,
-  "last_new_uics": 2,
-  "elapsed_seconds": 19383,
+  "last_activity": "2026-08-26T04:42:35.145685",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=0U&selectedSearchFilter=1",
+  "total_uics": 300938,
+  "last_new_uics": 1,
+  "elapsed_seconds": 19236,
   "error": null,
-  "saved_at": "2026-08-25T23:21:13.245205",
+  "saved_at": "2026-08-26T04:42:35.145691",
   "save_reason": "atexit"
 }

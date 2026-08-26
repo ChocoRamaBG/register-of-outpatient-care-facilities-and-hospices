@@ -1,40 +1,25 @@
-Timestamp: 2026-08-25T23:19:27.741311
-Label: query=FV, retry=3
-Exception: TimeoutError('Page.goto: Timeout 30000ms exceeded.\nCall log:\n  - navigating to "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=FV&selectedSearchFilter=1", waiting until "domcontentloaded"\n')
+Timestamp: 2026-08-26T04:41:53.978582
+Label: query=0U, retry=1
+Exception: RuntimeError('RATE_LIMIT')
 
 STATE:
 {
-  "query_idx": 2637,
-  "query": "FV",
+  "query_idx": 4064,
+  "query": "0U",
   "page_num": 0,
   "status": "goto",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-08-25T23:19:09.653211",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=FV&selectedSearchFilter=1",
-  "total_uics": 300842,
-  "last_new_uics": 2,
-  "elapsed_seconds": 19260,
+  "last_activity": "2026-08-26T04:41:52.471009",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=0U&selectedSearchFilter=1",
+  "total_uics": 300938,
+  "last_new_uics": 1,
+  "elapsed_seconds": 19193,
   "error": null
 }
 
 TRACEBACK:
 Traceback (most recent call last):
-  File "/home/runner/work/register-of-outpatient-care-facilities-and-hospices/register-of-outpatient-care-facilities-and-hospices/registry_agency_scraper/eik_extractor.py", line 812, in main
-    page.goto(
-  File "/opt/hostedtoolcache/Python/3.10.21/x64/lib/python3.10/site-packages/playwright/sync_api/_generated.py", line 9875, in goto
-    self._sync(
-  File "/opt/hostedtoolcache/Python/3.10.21/x64/lib/python3.10/site-packages/playwright/_impl/_sync_base.py", line 115, in _sync
-    return task.result()
-  File "/opt/hostedtoolcache/Python/3.10.21/x64/lib/python3.10/site-packages/playwright/_impl/_page.py", line 560, in goto
-    return await self._main_frame.goto(**locals_to_params(locals()))
-  File "/opt/hostedtoolcache/Python/3.10.21/x64/lib/python3.10/site-packages/playwright/_impl/_frame.py", line 156, in goto
-    await self._channel.send(
-  File "/opt/hostedtoolcache/Python/3.10.21/x64/lib/python3.10/site-packages/playwright/_impl/_connection.py", line 76, in send
-    return await self._connection.wrap_api_call(
-  File "/opt/hostedtoolcache/Python/3.10.21/x64/lib/python3.10/site-packages/playwright/_impl/_connection.py", line 632, in wrap_api_call
-    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
-playwright._impl._errors.TimeoutError: Page.goto: Timeout 30000ms exceeded.
-Call log:
-  - navigating to "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=FV&selectedSearchFilter=1", waiting until "domcontentloaded"
-
+  File "/home/runner/work/register-of-outpatient-care-facilities-and-hospices/register-of-outpatient-care-facilities-and-hospices/registry_agency_scraper/eik_extractor.py", line 827, in main
+    raise RuntimeError(
+RuntimeError: RATE_LIMIT
 

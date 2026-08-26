@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-08-25T23:21:09.655076",
-  "elapsed_seconds": 19380,
-  "query_idx": 2637,
-  "query": "FV",
+  "timestamp": "2026-08-26T04:42:29.252210",
+  "elapsed_seconds": 19230,
+  "query_idx": 4064,
+  "query": "0U",
   "page_num": 0,
   "status": "goto",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=FV&selectedSearchFilter=1",
-  "total_uics": 300842,
-  "last_new_uics": 2
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=0U&selectedSearchFilter=1",
+  "total_uics": 300938,
+  "last_new_uics": 1
 }
