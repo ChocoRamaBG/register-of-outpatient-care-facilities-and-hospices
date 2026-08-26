@@ -166,7 +166,7 @@ def retry_failed_profiles():
                 writer.writerow(details)
             
             mark_as_parsed(url)
-            print(f"  [+] Възстановен и записан: {details['Име']} | {unquote(url)}")
+            print(f"  [+] Възстановен и записан: {details['Име']} | Lat: {details['Latitude']}, Lon: {details['Longitude']} | {unquote(url)}")
         else:
             profile["Timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             still_failed.append(profile)
@@ -385,7 +385,7 @@ def main():
                     writer.writerow(details)
                 
                 mark_as_parsed(doc_url)
-                print(f"  [+] Записан: {details['Име']} | {unquote(doc_url)}")
+                print(f"  [+] Записан: {details['Име']} | Lat: {details['Latitude']}, Lon: {details['Longitude']} | {unquote(doc_url)}")
             else:
                 add_failed_profile(doc_url, page, "Неуспешно извличане")
 
