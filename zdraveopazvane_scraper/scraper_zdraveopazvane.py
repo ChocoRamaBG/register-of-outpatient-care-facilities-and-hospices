@@ -18,8 +18,12 @@ START_TIME = time.time()
 TIME_LIMIT_SECONDS = 5.4 * 60 * 60  # ~5 часа и 24 минути
 
 BASE_URL = ""
-while not BASE_URL:
-    BASE_URL = input("Моля, въведете базовия URL адрес (напр. https://.../?page=): ").strip()
+try:
+    while not BASE_URL:
+        BASE_URL = input("Моля, въведете базовия URL адрес (напр. https://.../?page=): ").strip()
+except EOFError:
+    print("\n[INFO] Липсва интерактивен терминал (напр. GitHub Actions). Използва се адресът по подразбиране.")
+    BASE_URL = "https://www.zdraveopazvaneto.bg/%D0%BB%D0%B5%D0%BA%D0%B0%D1%80%D0%B8-%D0%BF%D0%BA16.html?page="
 
 MAX_PAGE_RETRIES = 3
 RETRY_DELAY_SECONDS = 2
