@@ -17,7 +17,9 @@ from playwright.sync_api import (
 START_TIME = time.time()
 TIME_LIMIT_SECONDS = 5.4 * 60 * 60  # ~5 часа и 24 минути
 
-BASE_URL = "https://www.zdraveopazvaneto.bg/%D0%BB%D0%B5%D0%BA%D0%B0%D1%80%D0%B8-%D0%BF%D0%BA16.html?page="
+BASE_URL = ""
+while not BASE_URL:
+    BASE_URL = input("Моля, въведете базовия URL адрес (напр. https://.../?page=): ").strip()
 
 MAX_PAGE_RETRIES = 3
 RETRY_DELAY_SECONDS = 2
@@ -250,13 +252,11 @@ def extract_doctor_details(url):
 
     # Координати
     try:
-        # Добавяме [href] към CSS селектора, за да сме сигурни, че хващаме само тагове с реален линк
-        map_loc = driver_page.locator(".partitions_map_wrap a[href]").first
+        map_loc = driver_page.locator(".partitions_map_wrap iframe").first
         if map_loc.count() > 0:
-            href = map_loc.get_attribute("href")
-            if href:
-                # Използваме доказано работещия Regex от първия скрипт
-                match = re.search(r'([-+]?\d*\.\d+),([-+]?\d*\.\d+)', href)
+            src = map_loc.get_attribute("src")
+            if src:
+                match = re.search(r'q=([-+]?\d+\.\d+)[^\d]+([-+]?\d+\.\d+)', src)
                 if match:
                     details["Latitude"] = match.group(1)
                     details["Longitude"] = match.group(2)
