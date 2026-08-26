@@ -688,9 +688,25 @@ def main():
         for b in all_chars
     ]
 
+    bg_triples = [
+        a + b + c
+        for a in bg_alphabet
+        for b in bg_alphabet
+        for c in bg_alphabet
+    ]
+
+    bg_double_digit = [
+        a + b + c
+        for a in bg_alphabet
+        for b in bg_alphabet
+        for c in digits
+    ]
+
     search_queries = (
         single_chars +
-        double_chars
+        double_chars +
+        bg_triples +
+        bg_double_digit
     )
 
     log_msg(
