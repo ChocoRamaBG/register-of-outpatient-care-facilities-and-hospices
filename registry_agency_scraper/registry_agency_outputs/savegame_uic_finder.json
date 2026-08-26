@@ -1,15 +1,15 @@
 {
-  "query_idx": 4692,
-  "query": "99",
+  "query_idx": 5558,
+  "query": "АЫБ",
   "page_num": 0,
   "status": "atexit",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-08-26T09:34:08.287811",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=99&selectedSearchFilter=1",
-  "total_uics": 409847,
-  "last_new_uics": 20,
-  "elapsed_seconds": 4,
+  "last_activity": "2026-08-26T15:01:35.122422",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%90%D0%AB%D0%91&selectedSearchFilter=1",
+  "total_uics": 425361,
+  "last_new_uics": 0,
+  "elapsed_seconds": 19222,
   "error": null,
-  "saved_at": "2026-08-26T09:34:08.287828",
+  "saved_at": "2026-08-26T15:01:35.122428",
   "save_reason": "atexit"
 }
