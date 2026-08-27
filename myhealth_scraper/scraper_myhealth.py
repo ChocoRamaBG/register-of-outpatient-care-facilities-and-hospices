@@ -165,8 +165,12 @@ def get_text_safe(selectors, default="-"):
         try:
             locator = driver_page.locator(sel).first
             if locator.count() > 0:
-                text = locator.inner_text().strip().replace('\n', ' ')
-                if text:
+                # text_content() retrieves text even if visually hidden, avoiding inner_text() rendering issues
+                text = locator.text_content().strip()
+                # Clean up excessive whitespaces
+                text = re.sub(r'\s+', ' ', text)
+                
+                if text and text != "-" and "myhealth.bg" not in text.lower():
                     return text
         except: pass
     return default
@@ -174,22 +178,32 @@ def get_text_safe(selectors, default="-"):
 def extract_doctor_details(url):
     try:
         driver_page.goto(url, wait_until="domcontentloaded")
-        # Изчакване на главния контейнер да се рендира
-        driver_page.wait_for_selector(".doctor-header", timeout=10000)
-        time.sleep(0.5) 
+        # state="attached" ensures we don't wait for CSS visibility, just DOM presence
+        driver_page.wait_for_selector(".doctor-header, h1", state="attached", timeout=10000)
+        time.sleep(1.0) 
     except PlaywrightTimeoutError:
-        pass # Продължаваме напред, възможно е структурата на тази страница да е различна
+        pass
     except Exception as e:
         print(f"[ERROR] Loading failed for {url}: {e}")
         return None
 
     # Base Info Extraction
-    doc_name = get_text_safe([".doctor-header h2 a", ".doctor-header h2", "h1"])
+    doc_name = get_text_safe([
+        "xpath=//div[contains(@class, 'doctor-header')]//h2/a",
+        "xpath=//div[contains(@class, 'doctor-header')]//h2",
+        ".doctor-header h2 a",
+        ".doctor-header h2",
+        "h1"
+    ])
     
     if doc_name == "-" or not doc_name:
-        print(f"  [WARN] Липсва име за {url}. Продължаваме с наличните данни.")
+        print(f"  [WARN] Липсва име за профил: {url}. Пропускане.")
+        return None
 
-    specialty = get_text_safe(".doctor-speciality")
+    specialty = get_text_safe([
+        "xpath=//div[contains(@class, 'doctor-speciality')]",
+        ".doctor-speciality"
+    ])
     rating_text = get_text_safe("span.doctor-rating-score_count")
 
     # Biography
@@ -319,7 +333,6 @@ def main():
     global driver_page, BASE_SEARCH_URL
     clear_continuation_flag()
 
-    # Allow dynamic URL input via console/terminal, skip if running non-interactively
     if sys.stdin.isatty():
         try:
             custom_url = input(f"[INPUT] Provide target URL or press Enter to keep default ({BASE_SEARCH_URL}): ").strip()
@@ -342,7 +355,7 @@ def main():
 
         try:
             driver_page.goto(current_url, wait_until="domcontentloaded")
-            driver_page.wait_for_selector("a", timeout=10000)
+            driver_page.wait_for_selector("a", state="attached", timeout=10000)
         except Exception as e:
             print(f"[WARN] Error loading search page: {e}")
             state["consecutive_fails"] += 1
@@ -389,8 +402,6 @@ def main():
                 
                 mark_as_parsed(doc_url)
                 print(f"  [+] Saved: {details['Име']} | {unquote(doc_url)}")
-            else:
-                print(f"  [-] Failed extraction for: {doc_url}")
 
         if time_limit_hit_in_profiles:
             break
