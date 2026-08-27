@@ -157,26 +157,37 @@ driver_page = create_driver()
 # ============================================================
 # EXTRACTION HELPERS
 # ============================================================
-def get_text_safe(locator_selector, default="-"):
-    try:
-        locator = driver_page.locator(locator_selector).first
-        if locator.count() > 0:
-            return locator.inner_text().strip().replace('\n', ' ')
-    except: pass
+def get_text_safe(selectors, default="-"):
+    if isinstance(selectors, str):
+        selectors = [selectors]
+        
+    for sel in selectors:
+        try:
+            locator = driver_page.locator(sel).first
+            if locator.count() > 0:
+                text = locator.inner_text().strip().replace('\n', ' ')
+                if text:
+                    return text
+        except: pass
     return default
 
 def extract_doctor_details(url):
     try:
         driver_page.goto(url, wait_until="domcontentloaded")
+        # Изчакване на главния контейнер да се рендира
+        driver_page.wait_for_selector(".doctor-header", timeout=10000)
         time.sleep(0.5) 
+    except PlaywrightTimeoutError:
+        pass # Продължаваме напред, възможно е структурата на тази страница да е различна
     except Exception as e:
         print(f"[ERROR] Loading failed for {url}: {e}")
         return None
 
     # Base Info Extraction
-    doc_name = get_text_safe(".doctor-header h2 a")
-    if doc_name == "-":
-        return None  # Invalid profile page
+    doc_name = get_text_safe([".doctor-header h2 a", ".doctor-header h2", "h1"])
+    
+    if doc_name == "-" or not doc_name:
+        print(f"  [WARN] Липсва име за {url}. Продължаваме с наличните данни.")
 
     specialty = get_text_safe(".doctor-speciality")
     rating_text = get_text_safe("span.doctor-rating-score_count")
@@ -308,7 +319,7 @@ def main():
     global driver_page, BASE_SEARCH_URL
     clear_continuation_flag()
 
-    # Allow dynamic URL input via console/terminal, skip if running non-interactively (e.g., GitHub Actions)
+    # Allow dynamic URL input via console/terminal, skip if running non-interactively
     if sys.stdin.isatty():
         try:
             custom_url = input(f"[INPUT] Provide target URL or press Enter to keep default ({BASE_SEARCH_URL}): ").strip()
@@ -317,7 +328,6 @@ def main():
         except EOFError:
             pass
 
-    # Extract base domain to correctly map relative URLs
     parsed_base = urlparse(BASE_SEARCH_URL)
     base_domain = f"{parsed_base.scheme}://{parsed_base.netloc}"
 
@@ -344,13 +354,11 @@ def main():
         
         state["consecutive_fails"] = 0
 
-        # Extract doctor profile links
         links = driver_page.locator("a").all()
         doctor_urls = []
         for link in links:
             href = link.get_attribute("href")
             if href and ("/lekar/" in href or "/practices/lekar/" in href) and "search" not in href:
-                # Handle relative URLs correctly
                 if href.startswith("/"):
                     href = f"{base_domain}{href}"
                 doctor_urls.append(href)
