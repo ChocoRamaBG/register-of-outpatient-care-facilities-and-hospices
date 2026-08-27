@@ -119,14 +119,20 @@ def create_driver():
 
     _browser = _pw_instance.chromium.launch(
         headless=True,
-        args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
+        args=[
+            "--no-sandbox", 
+            "--disable-dev-shm-usage", 
+            "--disable-gpu",
+            "--disable-blink-features=AutomationControlled" # Анти-бот защита от оригиналния скрипт
+        ]
     )
     _context = _browser.new_context(
         viewport={'width': 1920, 'height': 1080},
         user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     )
-    # Block heavy assets for performance optimization
-    _context.route("**/*.{png,jpg,jpeg,webp,svg,css,woff,woff2}", lambda route: route.abort())
+    
+    # Блокираме САМО изображенията, за да не счупим CSS рендирането и JS видимостта на елементите
+    _context.route("**/*.{png,jpg,jpeg,webp,svg}", lambda route: route.abort())
     
     _page = _context.new_page()
     _page.set_default_navigation_timeout(30000)
@@ -165,12 +171,9 @@ def get_text_safe(selectors, default="-"):
         try:
             locator = driver_page.locator(sel).first
             if locator.count() > 0:
-                # text_content() retrieves text even if visually hidden, avoiding inner_text() rendering issues
                 text = locator.text_content().strip()
-                # Clean up excessive whitespaces
                 text = re.sub(r'\s+', ' ', text)
-                
-                if text and text != "-" and "myhealth.bg" not in text.lower():
+                if text and text != "-" and len(text) > 2:
                     return text
         except: pass
     return default
@@ -178,22 +181,19 @@ def get_text_safe(selectors, default="-"):
 def extract_doctor_details(url):
     try:
         driver_page.goto(url, wait_until="domcontentloaded")
-        # state="attached" ensures we don't wait for CSS visibility, just DOM presence
-        driver_page.wait_for_selector(".doctor-header, h1", state="attached", timeout=10000)
-        time.sleep(1.0) 
-    except PlaywrightTimeoutError:
-        pass
+        # Очакваме изрично видимостта на хедъра на доктора
+        driver_page.wait_for_selector(".doctor-header", state="visible", timeout=10000)
+        time.sleep(1.5) # Пауза за хидратация на JS (DOM State Machine)
     except Exception as e:
-        print(f"[ERROR] Loading failed for {url}: {e}")
+        print(f"[ERROR] Loading failed or timeout for {url}: {e}")
         return None
 
-    # Base Info Extraction
+    # Base Info Extraction - Приоритизираме оригиналния ви XPath
     doc_name = get_text_safe([
         "xpath=//div[contains(@class, 'doctor-header')]//h2/a",
         "xpath=//div[contains(@class, 'doctor-header')]//h2",
         ".doctor-header h2 a",
-        ".doctor-header h2",
-        "h1"
+        ".doctor-header h2"
     ])
     
     if doc_name == "-" or not doc_name:
