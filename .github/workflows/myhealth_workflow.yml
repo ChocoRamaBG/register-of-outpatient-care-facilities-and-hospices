@@ -1,0 +1,81 @@
+name: "(myhealth.bg) Autonomous Registry Scraper"
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 4 * * *' # Scheduled daily at 04:00 UTC
+
+concurrency:
+  group: myhealth-scraper
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./myhealth_scraper  # Change this to match your repository's directory name
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python Environment
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies & Playwright Browsers
+        run: |
+          python -m pip install --upgrade pip
+          pip install playwright
+          playwright install chromium --with-deps
+
+      - name: Execute Autonomous Deep Scrape
+        run: python scraper_myhealth.py
+
+      - name: Commit Progress Tracker and Data
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          
+          mkdir -p myhealth_outputs
+          touch myhealth_outputs/parsed_urls_myhealth.txt
+          
+          git add myhealth_outputs/parsed_urls_myhealth.txt
+          
+          if [ -f "myhealth_outputs/savegame_myhealth.json" ]; then
+            git add -f myhealth_outputs/savegame_myhealth.json
+          fi
+
+          if [ -f "myhealth_outputs/failed_profiles_myhealth.json" ]; then
+            git add -f myhealth_outputs/failed_profiles_myhealth.json
+          fi
+          
+          if [ -f "myhealth_outputs/myhealth_doctors_full.csv" ]; then
+            git add -f myhealth_outputs/myhealth_doctors_full.csv
+          fi
+          
+          if git diff --staged --quiet; then
+            echo "No new changes to commit."
+          else
+            git commit -m "Auto-save state: Update myhealth.bg extracted data"
+            git pull --rebase origin main
+            git push
+          fi
+
+      - name: Check Continue Flag and Trigger Next Run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -f "myhealth_outputs/CONTINUE_FLAG_MYHEALTH" ]; then
+            echo "Continue flag detected. Script hit time limit. Triggering next workflow run..."
+            gh workflow run "(myhealth.bg) Autonomous Registry Scraper"
+          else
+            echo "No continue flag detected. Scraping is 100% complete."
+          fi
