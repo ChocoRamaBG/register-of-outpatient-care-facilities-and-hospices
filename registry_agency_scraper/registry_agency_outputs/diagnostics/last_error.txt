@@ -1,19 +1,19 @@
-Timestamp: 2026-08-26T15:00:53.290445
-Label: query=АЫБ, retry=1
+Timestamp: 2026-08-27T12:22:49.802003
+Label: query=БЭС, retry=1
 Exception: RuntimeError('RATE_LIMIT')
 
 STATE:
 {
-  "query_idx": 5557,
-  "query": "АЫБ",
+  "query_idx": 6661,
+  "query": "БЭС",
   "page_num": 0,
   "status": "goto",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-08-26T15:00:51.784174",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%90%D0%AB%D0%91&selectedSearchFilter=1",
-  "total_uics": 425361,
-  "last_new_uics": 0,
-  "elapsed_seconds": 19178,
+  "last_activity": "2026-08-27T12:22:48.294127",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%91%D0%AD%D0%A1&selectedSearchFilter=1",
+  "total_uics": 436449,
+  "last_new_uics": 1,
+  "elapsed_seconds": 19129,
   "error": null
 }
 
