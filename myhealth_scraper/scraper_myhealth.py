@@ -1,9 +1,10 @@
 import os
+import sys
 import time
 import json
 import csv
 import re
-from urllib.parse import unquote
+from urllib.parse import unquote, urlparse
 from datetime import datetime
 
 from playwright.sync_api import (
@@ -304,8 +305,21 @@ def clear_continuation_flag():
         os.remove(CONTINUE_FLAG_FILE)
 
 def main():
-    global driver_page
+    global driver_page, BASE_SEARCH_URL
     clear_continuation_flag()
+
+    # Allow dynamic URL input via console/terminal, skip if running non-interactively (e.g., GitHub Actions)
+    if sys.stdin.isatty():
+        try:
+            custom_url = input(f"[INPUT] Provide target URL or press Enter to keep default ({BASE_SEARCH_URL}): ").strip()
+            if custom_url:
+                BASE_SEARCH_URL = custom_url
+        except EOFError:
+            pass
+
+    # Extract base domain to correctly map relative URLs
+    parsed_base = urlparse(BASE_SEARCH_URL)
+    base_domain = f"{parsed_base.scheme}://{parsed_base.netloc}"
 
     while True:
         if time_limit_reached():
@@ -336,6 +350,9 @@ def main():
         for link in links:
             href = link.get_attribute("href")
             if href and ("/lekar/" in href or "/practices/lekar/" in href) and "search" not in href:
+                # Handle relative URLs correctly
+                if href.startswith("/"):
+                    href = f"{base_domain}{href}"
                 doctor_urls.append(href)
 
         doctor_urls = list(set(doctor_urls))
