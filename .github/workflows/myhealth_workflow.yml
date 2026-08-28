@@ -2,8 +2,14 @@ name: "(myhealth.bg) Autonomous Registry Scraper"
 
 on:
   workflow_dispatch:
+    inputs:
+      start_page:
+        description: "Starting page when no savegame exists"
+        required: false
+        default: "164"
+
   schedule:
-    - cron: '0 4 * * *' # Scheduled daily at 04:00 UTC
+    - cron: "0 4 * * *"  # 04:00 UTC = 07:00 Bulgaria during EEST
 
 concurrency:
   group: myhealth-scraper
@@ -16,54 +22,83 @@ permissions:
 jobs:
   run-pipeline:
     runs-on: ubuntu-latest
+    timeout-minutes: 360
+
     defaults:
       run:
         working-directory: ./myhealth_scraper
+
+    env:
+      PYTHONUNBUFFERED: "1"
+      START_PAGE: ${{ github.event.inputs.start_page || '164' }}
+      TIME_LIMIT_SECONDS: "19440"  # 5h 24m
+
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Set up Python Environment
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
-          cache: 'pip'
+          python-version: "3.10"
+          cache: "pip"
 
-      - name: Install Dependencies
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install selenium webdriver-manager
+          python -m pip install --upgrade selenium
 
-      - name: Execute Autonomous Deep Scrape
+      - name: Verify Chrome and Python
+        run: |
+          python --version
+          google-chrome --version || true
+          python -m py_compile scraper_myhealth.py
+
+      - name: Execute autonomous scraper
         run: python scraper_myhealth.py
 
-      - name: Commit Progress Tracker and Data
+      - name: Commit progress and extracted data
         run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          
+          set -e
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
           mkdir -p myhealth_outputs
+
+          # Always keep these files under version control so the next run
+          # can resume from exactly where the previous run stopped.
           touch myhealth_outputs/parsed_urls_myhealth.txt
-          
+
+          # Get any remote changes before creating the commit.
+          git pull --rebase origin main
+
           git add myhealth_outputs/
-          
-          if git diff --staged --quiet; then
+
+          if git diff --cached --quiet; then
             echo "No new changes to commit."
           else
-            git commit -m "Auto-save state: Update myhealth.bg extracted data"
-            git pull --rebase origin main
-            git push
+            git commit -m "Auto-save state: update myhealth.bg scraper data"
+            git push origin HEAD:main
           fi
 
-      - name: Check Continue Flag and Trigger Next Run
+      - name: Check continuation flag
+        id: continuation
+        run: |
+          if [ -f "myhealth_outputs/CONTINUE_FLAG_MYHEALTH" ]; then
+            echo "continue=true" >> "$GITHUB_OUTPUT"
+            echo "Continue flag detected."
+          else
+            echo "continue=false" >> "$GITHUB_OUTPUT"
+            echo "No continue flag detected."
+          fi
+
+      - name: Trigger next run
+        if: steps.continuation.outputs.continue == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [ -f "myhealth_outputs/CONTINUE_FLAG_MYHEALTH" ]; then
-            echo "Continue flag detected. Script hit time limit. Triggering next workflow run..."
-            gh workflow run "(myhealth.bg) Autonomous Registry Scraper"
-          else
-            echo "No continue flag detected. Scraping is 100% complete."
-          fi
+          gh workflow run "(myhealth.bg) Autonomous Registry Scraper" \
+            --ref main
