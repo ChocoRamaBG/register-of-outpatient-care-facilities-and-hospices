@@ -2,7 +2,6 @@ import csv
 import json
 import os
 import re
-import sys
 import time
 from datetime import datetime
 from urllib.parse import unquote, urljoin, urlparse
@@ -13,978 +12,474 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-
-# ============================================================
-# CONFIG
-# ============================================================
-
 START_TIME = time.time()
-
-# GitHub Actions normally allows up to 6 hours per job.
-# Leave a safety margin so state can be committed cleanly.
-TIME_LIMIT_SECONDS = float(os.getenv("TIME_LIMIT_SECONDS", str(5.4 * 60 * 60)))
-
-BASE_SEARCH_URL = os.getenv(
-    "BASE_SEARCH_URL",
-    "https://myhealth.bg/search/?page="
-)
-
-# Your local scraper was running from page 164.
-DEFAULT_START_PAGE = int(os.getenv("START_PAGE", "164"))
-
-MAX_PAGE_RETRIES = 4
+TIME_LIMIT_SECONDS = float(os.getenv('TIME_LIMIT_SECONDS', str(5.4 * 60 * 60)))
+BASE_SEARCH_URL = os.getenv('BASE_SEARCH_URL', 'https://myhealth.bg/search/?page=')
+DEFAULT_START_PAGE = int(os.getenv('START_PAGE', '1'))
+MAX_PAGE_RETRIES = 5
 MAX_PROFILE_RETRIES = 3
-PAGE_WAIT_SECONDS = 30
-PROFILE_WAIT_SECONDS = 20
-POST_LOAD_SLEEP = 1.5
-
-BLOCKED_MARKERS = (
-    "too many requests",
-    "access denied",
-    "cloudflare",
-    "just a moment",
-    "temporarily unavailable",
-    "429",
-)
-
-
-# ============================================================
-# PATHS
-# ============================================================
+PAGE_WAIT_SECONDS = 45
+PROFILE_WAIT_SECONDS = 30
 
 try:
     SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 except NameError:
     SCRIPT_DIR = os.getcwd()
 
-OUTPUT_DIR = os.path.join(SCRIPT_DIR, "myhealth_outputs")
+OUTPUT_DIR = os.path.join(SCRIPT_DIR, 'myhealth_outputs')
 os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-STATE_FILE = os.path.join(OUTPUT_DIR, "savegame_myhealth.json")
-MEMORY_FILE = os.path.join(OUTPUT_DIR, "parsed_urls_myhealth.txt")
-CSV_FILE = os.path.join(OUTPUT_DIR, "myhealth_doctors_full.csv")
-CONTINUE_FLAG_FILE = os.path.join(OUTPUT_DIR, "CONTINUE_FLAG_MYHEALTH")
-
-
-# ============================================================
-# CSV SCHEMA
-# ============================================================
+STATE_FILE = os.path.join(OUTPUT_DIR, 'savegame_myhealth.json')
+MEMORY_FILE = os.path.join(OUTPUT_DIR, 'parsed_urls_myhealth.txt')
+CSV_FILE = os.path.join(OUTPUT_DIR, 'myhealth_doctors_full.csv')
+CONTINUE_FLAG_FILE = os.path.join(OUTPUT_DIR, 'CONTINUE_FLAG_MYHEALTH')
 
 FIELDNAMES = [
-    "Име",
-    "Специалност",
-    "Рейтинг_Инфо",
-    "Първи свободен час (Общо)",
-    "Телефони",
-    "НЗОК",
-    "Биография",
-    "URL",
-    "Timestamp",
-    "Цени",
-    "Застрахователи",
+    'Име', 'Специалност', 'Рейтинг_Инфо', 'Първи свободен час (Общо)',
+    'Телефони', 'НЗОК', 'Биография', 'URL', 'Timestamp', 'Цени', 'Застрахователи'
 ]
-
 for i in range(1, 5):
-    FIELDNAMES.extend(
-        [
-            f"Hospital_{i}",
-            f"Address_{i}",
-            f"First_Free_{i}",
-            f"Coords_{i}",
-        ]
-    )
+    FIELDNAMES += [f'Hospital_{i}', f'Address_{i}', f'First_Free_{i}', f'Coords_{i}']
 
-
-# ============================================================
-# STATE / MEMORY
-# ============================================================
-
-START_PAGE = DEFAULT_START_PAGE
-
-state = {
-    "page": START_PAGE,
-    "consecutive_fails": 0,
-}
-
-
-def load_state():
-    global state
-
-    if not os.path.exists(STATE_FILE):
-        print(f"[INFO] No state file. Starting from page {state['page']}.")
-        return
-
-    try:
-        with open(STATE_FILE, "r", encoding="utf-8") as f:
-            loaded = json.load(f)
-
-        loaded_page = int(loaded.get("page", state["page"]))
-        state.update(loaded)
-        state["page"] = max(1, loaded_page)
-
-        print(f"[INFO] Resuming from page {state['page']}.")
-    except Exception as exc:
-        print(f"[WARN] Could not load state: {exc}")
-        print(f"[INFO] Falling back to page {state['page']}.")
+state = {'page': DEFAULT_START_PAGE, 'consecutive_fails': 0}
+parsed_urls = set()
+driver = None
 
 
 def save_state():
-    temp_file = STATE_FILE + ".tmp"
-
+    tmp = STATE_FILE + '.tmp'
     try:
-        state["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        with open(temp_file, "w", encoding="utf-8") as f:
+        state['updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        with open(tmp, 'w', encoding='utf-8') as f:
             json.dump(state, f, ensure_ascii=False, indent=2)
-
-        os.replace(temp_file, STATE_FILE)
-        return True
-
-    except Exception as exc:
-        print(f"[ERROR] Could not save state: {exc}")
-        return False
+        os.replace(tmp, STATE_FILE)
+    except Exception as e:
+        print(f'[WARN] Could not save state: {e}')
 
 
-parsed_urls = set()
+def load_state():
+    if not os.path.exists(STATE_FILE):
+        print(f"[INFO] No state file. Starting from page {state['page']}.")
+        return
+    try:
+        with open(STATE_FILE, 'r', encoding='utf-8') as f:
+            loaded = json.load(f)
+        state.update(loaded)
+        state['page'] = max(1, int(state.get('page', DEFAULT_START_PAGE)))
+        print(f"[INFO] Resuming from page {state['page']}.")
+    except Exception as e:
+        print(f'[WARN] Could not load state: {e}')
 
 
 def load_memory():
     if not os.path.exists(MEMORY_FILE):
-        print("[INFO] Parsed URL memory does not exist yet.")
+        print('[INFO] URL memory does not exist yet.')
         return
-
     try:
-        with open(MEMORY_FILE, "r", encoding="utf-8") as f:
+        with open(MEMORY_FILE, 'r', encoding='utf-8') as f:
             for line in f:
-                url = line.strip()
-                if not url:
-                    continue
-
-                parsed_urls.add(url)
-                parsed_urls.add(unquote(url))
-
-        print(f"[INFO] Loaded {len(parsed_urls)} URL memory entries.")
-
-    except Exception as exc:
-        print(f"[WARN] Could not load URL memory: {exc}")
+                u = line.strip()
+                if u:
+                    parsed_urls.add(u)
+                    parsed_urls.add(unquote(u))
+        print(f'[INFO] Loaded {len(parsed_urls)} URL memory entries.')
+    except Exception as e:
+        print(f'[WARN] Could not load URL memory: {e}')
 
 
 def canonicalize_url(url):
     if not url:
-        return ""
-
+        return ''
     url = url.strip()
-
-    if url.startswith("/"):
-        url = urljoin("https://myhealth.bg", url)
-
-    # Remove fragment only. Keep query parameters if the site needs them.
-    parsed = urlparse(url)
-    clean = parsed._replace(fragment="").geturl()
-
-    return clean.rstrip("/")
+    if url.startswith('/'):
+        url = urljoin('https://myhealth.bg', url)
+    return urlparse(url)._replace(fragment='').geturl().rstrip('/')
 
 
 def is_parsed(url):
-    canonical = canonicalize_url(url)
-    decoded = unquote(canonical)
-
-    return canonical in parsed_urls or decoded in parsed_urls
+    u = canonicalize_url(url)
+    return u in parsed_urls or unquote(u) in parsed_urls
 
 
 def mark_as_parsed(url):
-    canonical = canonicalize_url(url)
-
-    if not canonical:
+    u = canonicalize_url(url)
+    if not u:
         return
-
-    decoded = unquote(canonical)
-
-    parsed_urls.add(canonical)
-    parsed_urls.add(decoded)
-
-    try:
-        with open(MEMORY_FILE, "a", encoding="utf-8") as f:
-            f.write(canonical + "\n")
-    except Exception as exc:
-        print(f"[ERROR] Could not update URL memory: {exc}")
+    parsed_urls.add(u)
+    parsed_urls.add(unquote(u))
+    with open(MEMORY_FILE, 'a', encoding='utf-8') as f:
+        f.write(u + '\n')
 
 
-# ============================================================
-# CSV INIT
-# ============================================================
+def time_limit_reached():
+    return time.time() - START_TIME >= TIME_LIMIT_SECONDS
+
 
 def init_csv():
     if os.path.exists(CSV_FILE) and os.path.getsize(CSV_FILE) > 0:
         return
-
-    with open(CSV_FILE, "w", encoding="utf-8-sig", newline="") as f:
-        writer = csv.DictWriter(
-            f,
-            fieldnames=FIELDNAMES,
-            extrasaction="ignore",
-        )
-        writer.writeheader()
-
-    print(f"[INFO] Created CSV: {CSV_FILE}")
+    with open(CSV_FILE, 'w', encoding='utf-8-sig', newline='') as f:
+        csv.DictWriter(f, fieldnames=FIELDNAMES, extrasaction='ignore').writeheader()
 
 
-def append_doctor_to_csv(details):
-    with open(CSV_FILE, "a", encoding="utf-8-sig", newline="") as f:
-        writer = csv.DictWriter(
-            f,
-            fieldnames=FIELDNAMES,
-            extrasaction="ignore",
-        )
-        writer.writerow(details)
+def append_csv(row):
+    with open(CSV_FILE, 'a', encoding='utf-8-sig', newline='') as f:
+        csv.DictWriter(f, fieldnames=FIELDNAMES, extrasaction='ignore').writerow(row)
         f.flush()
         os.fsync(f.fileno())
 
 
-# ============================================================
-# SELENIUM
-# ============================================================
-
-driver = None
-
-
 def init_driver():
     global driver
-
     options = webdriver.ChromeOptions()
-
-    options.add_argument("--headless=new")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=1920,1080")
-    options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_argument("--log-level=3")
-
-    # Selenium Manager is preferred in GitHub Actions.
-    # It automatically finds/downloads the matching browser driver.
+    # Headed Chrome is intentional. The GitHub workflow wraps this in Xvfb
+    # so the environment is much closer to the working local scraper.
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--disable-gpu')
+    options.add_argument('--window-size=1920,1080')
+    options.add_argument('--disable-blink-features=AutomationControlled')
+    options.add_argument('--log-level=3')
+    options.add_argument('--disable-notifications')
+    options.add_argument('--disable-popup-blocking')
+    options.page_load_strategy = 'none'
     driver = webdriver.Chrome(options=options)
-
-    driver.set_page_load_timeout(PAGE_WAIT_SECONDS)
-    driver.set_script_timeout(PAGE_WAIT_SECONDS)
-
-    print("[INFO] Chrome driver started successfully.")
+    driver.set_page_load_timeout(10)
+    driver.set_script_timeout(30)
+    print('[INFO] Chrome driver started successfully.')
 
 
 def restart_driver():
     global driver
-
-    print("[INFO] Restarting browser...")
-
+    print('[INFO] Restarting browser...')
     try:
-        if driver is not None:
+        if driver:
             driver.quit()
     except Exception:
         pass
-
     driver = None
-    time.sleep(2)
+    time.sleep(3)
     init_driver()
 
 
 def close_driver():
     global driver
-
     try:
-        if driver is not None:
+        if driver:
             driver.quit()
     except Exception:
         pass
-
     driver = None
 
 
-# ============================================================
-# HELPERS
-# ============================================================
-
-def time_limit_reached():
-    return (time.time() - START_TIME) >= TIME_LIMIT_SECONDS
-
-
-def get_page_text():
+def body_text():
     try:
-        return driver.find_element(By.TAG_NAME, "body").text.strip().lower()
+        return driver.find_element(By.TAG_NAME, 'body').text.lower()
     except Exception:
-        return ""
+        return ''
 
 
-def page_looks_blocked():
-    text = get_page_text()
-
-    if not text:
-        return False
-
-    return any(marker in text for marker in BLOCKED_MARKERS)
+def blocked_page():
+    text = body_text()
+    markers = ('too many requests', 'access denied', 'cloudflare', 'just a moment', 'temporarily unavailable')
+    return any(m in text for m in markers)
 
 
-def get_text_safe(xpath, search_context=None, default="-"):
+def get_text_safe(xpath, context=None, default='-'):
     try:
-        ctx = search_context if search_context else driver
-        element = ctx.find_element(By.XPATH, xpath)
-        return element.text.strip().replace("\n", " ")
+        el = (context or driver).find_element(By.XPATH, xpath)
+        return el.text.strip().replace('\n', ' ')
     except Exception:
         return default
 
 
-# ============================================================
-# EXTRACTION
-# ============================================================
-
 def scrape_insurances_myhealth():
     try:
-        logos = driver.find_elements(
-            By.XPATH,
-            "//div[contains(@class, 'practice__insurance-logos')]//img",
-        )
-
-        insurances = []
-
-        for img in logos:
-            alt = img.get_attribute("alt")
-            if alt:
-                alt = alt.strip()
-                if alt:
-                    insurances.append(alt)
-
-        # Preserve order while removing duplicates.
-        insurances = list(dict.fromkeys(insurances))
-
-        return ", ".join(insurances) if insurances else "-"
-
+        imgs = driver.find_elements(By.XPATH, "//div[contains(@class, 'practice__insurance-logos')]//img")
+        vals = []
+        for img in imgs:
+            alt = (img.get_attribute('alt') or '').strip()
+            if alt and alt not in vals:
+                vals.append(alt)
+        return ', '.join(vals) if vals else '-'
     except Exception:
-        return "-"
+        return '-'
 
 
 def scrape_prices_myhealth():
     try:
-        price_items = driver.find_elements(
-            By.XPATH,
-            "//div[contains(@class, 'practice__pricing-text--item')]",
-        )
-
-        found_prices = []
-
-        for item in price_items:
+        items = driver.find_elements(By.XPATH, "//div[contains(@class, 'practice__pricing-text--item')]")
+        vals = []
+        for item in items:
             try:
-                name = item.find_element(
-                    By.XPATH,
-                    ".//p[contains(@class, 'dummy--reason__name')]",
-                ).text.strip()
-
-                value = item.find_element(
-                    By.XPATH,
-                    ".//p[contains(@class, 'dummy--reason__price')]",
-                ).text.strip()
-
-                if name or value:
-                    found_prices.append(f"{name}: {value}")
-
+                name = item.find_element(By.XPATH, ".//p[contains(@class, 'dummy--reason__name')]").text.strip()
+                price = item.find_element(By.XPATH, ".//p[contains(@class, 'dummy--reason__price')]").text.strip()
+                vals.append(f'{name}: {price}')
             except Exception:
-                continue
-
-        return " | ".join(found_prices) if found_prices else "-"
-
+                pass
+        return ' | '.join(vals) if vals else '-'
     except Exception:
-        return "-"
+        return '-'
 
 
 def get_coordinates_from_map_link(context=None):
     try:
-        ctx = context if context else driver
-
-        links = ctx.find_elements(
-            By.XPATH,
-            ".//a[contains(@href, 'google.com/maps') and contains(@href, 'daddr')]",
-        )
-
+        ctx = context or driver
+        links = ctx.find_elements(By.XPATH, ".//a[contains(@href, 'google.com/maps') and contains(@href, 'daddr')]")
         for link in links:
-            href = link.get_attribute("href") or ""
-
-            match = re.search(
-                r"(?:[?&])daddr=([+-]?\d+(?:\.\d+)?),([+-]?\d+(?:\.\d+)?)",
-                href,
-            )
-
-            if match:
-                return f"{match.group(1)}, {match.group(2)}"
-
-        return "-"
-
+            href = link.get_attribute('href') or ''
+            m = re.search(r'(?:[?&])daddr=([+-]?\d+(?:\.\d+)?),([+-]?\d+(?:\.\d+)?)', href)
+            if m:
+                return f'{m.group(1)}, {m.group(2)}'
+        return '-'
     except Exception:
-        return "-"
+        return '-'
 
 
 def get_full_biography():
     try:
-        hidden = driver.find_elements(By.ID, "hidden-profile-resume")
-
+        hidden = driver.find_elements(By.ID, 'hidden-profile-resume')
         if hidden:
-            text = driver.execute_script(
-                "return arguments[0].textContent || '';",
-                hidden[0],
-            ).strip()
-
+            text = driver.execute_script("return arguments[0].textContent || '';", hidden[0]).strip()
             if text:
                 return text
-
         try:
-            read_more_btn = driver.find_element(
-                By.CSS_SELECTOR,
-                "button[data-hidden-text-id='profile-resume']",
-            )
-
-            if read_more_btn.is_displayed():
-                driver.execute_script(
-                    "arguments[0].click();",
-                    read_more_btn,
-                )
+            btn = driver.find_element(By.CSS_SELECTOR, "button[data-hidden-text-id='profile-resume']")
+            if btn.is_displayed():
+                driver.execute_script('arguments[0].click();', btn)
                 time.sleep(0.5)
-
         except Exception:
             pass
-
-        bio = driver.find_element(By.ID, "profile-resume")
-        return bio.text.strip()
-
+        return driver.find_element(By.ID, 'profile-resume').text.strip()
     except Exception:
-        return "-"
+        return '-'
 
 
 def scrape_practices_detailed():
-    practices_data = []
-
+    results = []
+    dates_map = {}
     try:
-        free_dates_map = {}
-
-        # ----------------------------------------------------
-        # Available dates
-        # ----------------------------------------------------
         try:
-            dates_container = driver.find_element(
-                By.CLASS_NAME,
-                "dummy--detailed-profile-card__practices",
-            )
-
-            titles = dates_container.find_elements(
-                By.CLASS_NAME,
-                "dummy--detailed-profile-card__practices-title",
-            )
-
-            dates = dates_container.find_elements(
-                By.CLASS_NAME,
-                "dummy--detailed-profile-card__practices-fa",
-            )
-
+            box = driver.find_element(By.CLASS_NAME, 'dummy--detailed-profile-card__practices')
+            titles = box.find_elements(By.CLASS_NAME, 'dummy--detailed-profile-card__practices-title')
+            dates = box.find_elements(By.CLASS_NAME, 'dummy--detailed-profile-card__practices-fa')
             if len(titles) == len(dates):
                 for title, date_el in zip(titles, dates):
-                    title_text = title.text.strip()
-                    raw_date = date_el.get_attribute("data-date")
-                    visible_date = date_el.text.strip()
-
-                    final_date = (
-                        raw_date.replace("T", " ").split("+")[0]
-                        if raw_date
-                        else visible_date
-                    )
-
-                    key = re.sub(
-                        r"\s+",
-                        "",
-                        title_text.lower(),
-                    )
-
+                    key = re.sub(r'\s+', '', title.text.strip().lower())
+                    raw = date_el.get_attribute('data-date')
+                    value = raw.replace('T', ' ').split('+')[0] if raw else date_el.text.strip()
                     if key:
-                        free_dates_map[key] = final_date
-
+                        dates_map[key] = value
         except Exception:
             pass
 
-        # ----------------------------------------------------
-        # Workplaces
-        # ----------------------------------------------------
-        workplaces = driver.find_elements(
-            By.CLASS_NAME,
-            "doctor-details__workplace-item",
-        )
-
-        for workplace in workplaces:
+        workplaces = driver.find_elements(By.CLASS_NAME, 'doctor-details__workplace-item')
+        for wp in workplaces:
             try:
-                hospital_name = workplace.find_element(
-                    By.CLASS_NAME,
-                    "doctor-details__workplace-item-title",
-                ).text.strip()
-
-                address = workplace.find_element(
-                    By.CLASS_NAME,
-                    "doctor-details__workplace-item-address",
-                ).text.strip()
-
-                coords = get_coordinates_from_map_link(workplace)
-
-                first_date = "Няма свободни часове"
-
-                combined = re.sub(
-                    r"\s+",
-                    "",
-                    f"{hospital_name}{address}".lower(),
-                )
-
-                address_key = re.sub(
-                    r"\s+",
-                    "",
-                    address.lower(),
-                )
-
-                # Exact/contains matching against normalized strings.
-                for key, value in free_dates_map.items():
-
-                    if key and (
-                        key in combined or combined in key
-                    ):
-                        first_date = value
+                name = wp.find_element(By.CLASS_NAME, 'doctor-details__workplace-item-title').text.strip()
+                address = wp.find_element(By.CLASS_NAME, 'doctor-details__workplace-item-address').text.strip()
+                full = re.sub(r'\s+', '', (name + address).lower())
+                addr = re.sub(r'\s+', '', address.lower())
+                first = 'Няма свободни часове'
+                for key, value in dates_map.items():
+                    if key and (key in full or full in key):
+                        first = value
                         break
-
-                    if (
-                        address_key
-                        and len(address_key) > 5
-                        and address_key in key
-                    ):
-                        first_date = value
+                    if addr and len(addr) > 5 and addr in key:
+                        first = value
                         break
-
-                practices_data.append(
-                    {
-                        "Hospital": hospital_name,
-                        "Address": address,
-                        "First_Date": first_date,
-                        "Coords": coords,
-                    }
-                )
-
+                results.append({'Hospital': name, 'Address': address, 'First_Date': first, 'Coords': get_coordinates_from_map_link(wp)})
             except Exception:
-                continue
-
-    except Exception as exc:
-        print(f"[WARN] Practice scrape error: {exc}")
-
-    return practices_data
+                pass
+    except Exception:
+        pass
+    return results
 
 
 def get_all_first_available_dates_summary():
-    dates_found = []
-
+    found = []
     try:
-        date_elements = driver.find_elements(
-            By.CLASS_NAME,
-            "dummy--detailed-profile-card__practices-fa",
-        )
-
-        for date_el in date_elements:
-            raw_date = date_el.get_attribute("data-date")
-
-            if raw_date:
-                clean_date = raw_date.replace("T", " ").split("+")[0]
-                dates_found.append(clean_date)
-            else:
-                txt = date_el.text.strip()
-                if txt:
-                    dates_found.append(txt)
-
+        for el in driver.find_elements(By.CLASS_NAME, 'dummy--detailed-profile-card__practices-fa'):
+            raw = el.get_attribute('data-date')
+            val = raw.replace('T', ' ').split('+')[0] if raw else el.text.strip()
+            if val:
+                found.append(val)
     except Exception:
         pass
-
-    # Fallback
-    if not dates_found:
+    if not found:
         try:
-            buttons = driver.find_elements(
-                By.CLASS_NAME,
-                "dummy--booking-component__first_available",
-            )
-
-            for button in buttons:
-                raw_date = button.get_attribute(
-                    "data-dummy-first-available"
-                )
-
-                if raw_date:
-                    clean_date = raw_date.replace("T", " ").split("+")[0]
-                    dates_found.append(clean_date)
-
+            for el in driver.find_elements(By.CLASS_NAME, 'dummy--booking-component__first_available'):
+                raw = el.get_attribute('data-dummy-first-available')
+                if raw:
+                    found.append(raw.replace('T', ' ').split('+')[0])
         except Exception:
             pass
-
-    # Preserve order and remove duplicates.
-    dates_found = list(dict.fromkeys(dates_found))
-
-    return (
-        " | ".join(dates_found)
-        if dates_found
-        else "Няма свободни часове"
-    )
-
-
-# ============================================================
-# DOCTOR URL DISCOVERY
-# ============================================================
-
-DOCTOR_PATH_MARKERS = (
-    "/lekar/",
-    "/practices/lekar/",
-)
+    return ' | '.join(dict.fromkeys(found)) if found else 'Няма свободни часове'
 
 
 def extract_doctor_urls():
     urls = []
-
     try:
-        links = driver.find_elements(By.TAG_NAME, "a")
-
-        for link in links:
-            href = link.get_attribute("href")
-
+        for link in driver.find_elements(By.TAG_NAME, 'a'):
+            href = link.get_attribute('href')
             if not href:
                 continue
-
-            absolute = canonicalize_url(href)
-            parsed = urlparse(absolute)
-
-            if parsed.netloc != "myhealth.bg":
+            u = canonicalize_url(href)
+            p = urlparse(u)
+            if p.netloc.lower() != 'myhealth.bg':
                 continue
-
-            path = parsed.path.lower()
-
-            if any(marker in path for marker in DOCTOR_PATH_MARKERS):
-                if "/search" not in path:
-                    urls.append(absolute)
-
-    except Exception as exc:
-        print(f"[WARN] Could not collect doctor links: {exc}")
-
-    # Preserve order while deduplicating.
+            path = p.path.lower()
+            if ('/lekar/' in path or '/practices/lekar/' in path) and '/search' not in path:
+                urls.append(u)
+    except Exception:
+        pass
     return list(dict.fromkeys(urls))
 
 
-# ============================================================
-# DOCTOR PROFILE
-# ============================================================
+def wait_for_doctor_urls():
+    end = time.time() + PAGE_WAIT_SECONDS
+    while time.time() < end:
+        if blocked_page():
+            raise RuntimeError('Blocked / rate-limited page detected')
+        urls = extract_doctor_urls()
+        if urls:
+            return urls
+        time.sleep(1)
+    return []
+
+
+def load_search_page(page_number):
+    url = f'{BASE_SEARCH_URL}{page_number}'
+    for attempt in range(1, MAX_PAGE_RETRIES + 1):
+        if time_limit_reached():
+            return None
+        print(f'\n[PAGE {page_number}] Attempt {attempt}/{MAX_PAGE_RETRIES}: {url}')
+        try:
+            try:
+                driver.get(url)
+            except TimeoutException:
+                print('[WARN] Navigation timeout; continuing to inspect the DOM.')
+            urls = wait_for_doctor_urls()
+            if urls:
+                print(f'[INFO] Page {page_number}: found {len(urls)} doctor profile URLs.')
+                return urls
+            print('[WARN] Page loaded but no doctor URLs were found.')
+        except Exception as e:
+            print(f'[WARN] Search page attempt failed: {e}')
+        if attempt < MAX_PAGE_RETRIES:
+            restart_driver()
+            time.sleep(2 * attempt)
+    return None
+
 
 def scrape_doctor_profile_myhealth(url):
     for attempt in range(1, MAX_PROFILE_RETRIES + 1):
-
         if time_limit_reached():
             return None
-
         try:
-            print(f"    [PROFILE {attempt}/{MAX_PROFILE_RETRIES}] {url}")
-
-            driver.get(url)
-
+            print(f'    [PROFILE {attempt}/{MAX_PROFILE_RETRIES}] {url}')
+            try:
+                driver.get(url)
+            except TimeoutException:
+                print('    [WARN] Navigation timeout; continuing to inspect the DOM.')
             WebDriverWait(driver, PROFILE_WAIT_SECONDS).until(
-                EC.presence_of_element_located(
-                    (By.CLASS_NAME, "doctor-header")
-                )
+                EC.presence_of_element_located((By.CLASS_NAME, 'doctor-header'))
             )
-
-            # Give dynamically populated practice/booking elements a moment.
-            time.sleep(POST_LOAD_SLEEP)
-
-            if page_looks_blocked():
-                raise RuntimeError("Blocked / rate-limited page detected")
-
-            doc_name = get_text_safe(
-                "//div[contains(@class, 'doctor-header')]//h2/a"
-            )
-
-            specialty = get_text_safe(
-                "//div[contains(@class, 'doctor-speciality')]"
-            )
-
-            rating_text = get_text_safe(
-                "//span[contains(@class, 'doctor-rating-score_count')]"
-            )
-
-            bio = get_full_biography()
-
-            nzok = "Не"
-
-            try:
-                if driver.find_elements(
-                    By.XPATH,
-                    "//span[contains(@class, 'ww-nzok')]",
-                ):
-                    nzok = "Да"
-            except Exception:
-                pass
-
-            phone_values = []
-
-            try:
-                phone_links = driver.find_elements(
-                    By.XPATH,
-                    "//a[contains(@href, 'tel:')]",
-                )
-
-                for link in phone_links:
-                    href = link.get_attribute("href") or ""
-
-                    if href.startswith("tel:"):
-                        phone_values.append(href[4:])
-
-            except Exception:
-                pass
-
-            phone_values = list(dict.fromkeys(phone_values))
-
-            practices = scrape_practices_detailed()
-
-            if not practices:
-                practices = [
-                    {
-                        "Hospital": "-",
-                        "Address": "-",
-                        "First_Date": "-",
-                        "Coords": "-",
-                    }
-                ]
-
-            doc_info = {
-                "Име": doc_name,
-                "Специалност": specialty,
-                "Рейтинг_Инфо": rating_text,
-                "Първи свободен час (Общо)": get_all_first_available_dates_summary(),
-                "Телефони": ", ".join(phone_values) if phone_values else "-",
-                "НЗОК": nzok,
-                "Биография": bio[:1000],
-                "URL": canonicalize_url(url),
-                "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "Цени": scrape_prices_myhealth(),
-                "Застрахователи": scrape_insurances_myhealth(),
+            if blocked_page():
+                raise RuntimeError('Blocked / rate-limited profile detected')
+            time.sleep(1)
+            doc_name = get_text_safe("//div[contains(@class, 'doctor-header')]//h2/a")
+            if not doc_name or doc_name == '-':
+                raise RuntimeError('Doctor name not found')
+            nzok = 'Да' if driver.find_elements(By.XPATH, "//span[contains(@class, 'ww-nzok')]") else 'Не'
+            phones = []
+            for link in driver.find_elements(By.XPATH, "//a[contains(@href, 'tel:')]"):
+                href = link.get_attribute('href') or ''
+                if href.startswith('tel:') and href[4:] not in phones:
+                    phones.append(href[4:])
+            practices = scrape_practices_detailed() or [{'Hospital': '-', 'Address': '-', 'First_Date': '-', 'Coords': '-'}]
+            row = {
+                'Име': doc_name,
+                'Специалност': get_text_safe("//div[contains(@class, 'doctor-speciality')]") ,
+                'Рейтинг_Инфо': get_text_safe("//span[contains(@class, 'doctor-rating-score_count')]") ,
+                'Първи свободен час (Общо)': get_all_first_available_dates_summary(),
+                'Телефони': ', '.join(phones) if phones else '-',
+                'НЗОК': nzok,
+                'Биография': get_full_biography()[:1000],
+                'URL': canonicalize_url(url),
+                'Timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'Цени': scrape_prices_myhealth(),
+                'Застрахователи': scrape_insurances_myhealth(),
             }
-
             for i in range(1, 5):
                 p = practices[i - 1] if i <= len(practices) else None
-
-                doc_info[f"Hospital_{i}"] = (
-                    p["Hospital"] if p else "-"
-                )
-                doc_info[f"Address_{i}"] = (
-                    p["Address"] if p else "-"
-                )
-                doc_info[f"First_Free_{i}"] = (
-                    p["First_Date"] if p else "-"
-                )
-                doc_info[f"Coords_{i}"] = (
-                    p["Coords"] if p else "-"
-                )
-
-            if not doc_name or doc_name == "-":
-                print(f"    [WARN] No doctor name found: {url}")
-                return None
-
-            return doc_info
-
-        except (TimeoutException, WebDriverException, RuntimeError) as exc:
-            print(f"    [WARN] Profile attempt failed: {exc}")
-
+                row[f'Hospital_{i}'] = p['Hospital'] if p else '-'
+                row[f'Address_{i}'] = p['Address'] if p else '-'
+                row[f'First_Free_{i}'] = p['First_Date'] if p else '-'
+                row[f'Coords_{i}'] = p['Coords'] if p else '-'
+            return row
+        except Exception as e:
+            print(f'    [WARN] Profile attempt failed: {e}')
             if attempt < MAX_PROFILE_RETRIES:
                 restart_driver()
-                continue
-
-        except Exception as exc:
-            print(f"    [ERROR] Unexpected profile error: {exc}")
-
-            if attempt < MAX_PROFILE_RETRIES:
-                restart_driver()
-                continue
-
-        return None
-
     return None
 
-
-# ============================================================
-# SEARCH PAGE
-# ============================================================
-
-def load_search_page(page_number):
-    url = f"{BASE_SEARCH_URL}{page_number}"
-
-    for attempt in range(1, MAX_PAGE_RETRIES + 1):
-
-        if time_limit_reached():
-            return None
-
-        try:
-            print(
-                f"\n[PAGE {page_number}] "
-                f"Attempt {attempt}/{MAX_PAGE_RETRIES}: {url}"
-            )
-
-            driver.get(url)
-
-            # Critical wait:
-            # wait specifically for doctor profile links, not generic <a>.
-            WebDriverWait(driver, PAGE_WAIT_SECONDS).until(
-                EC.presence_of_element_located(
-                    (
-                        By.XPATH,
-                        "//a[contains(@href, '/lekar/') "
-                        "or contains(@href, '/practices/lekar/')]",
-                    )
-                )
-            )
-
-            time.sleep(POST_LOAD_SLEEP)
-
-            if page_looks_blocked():
-                raise RuntimeError("Blocked / rate-limited search page detected")
-
-            doctor_urls = extract_doctor_urls()
-
-            if doctor_urls:
-                return doctor_urls
-
-            print("[WARN] Page loaded, but no doctor URLs were found.")
-
-        except Exception as exc:
-            print(f"[WARN] Search page attempt failed: {exc}")
-
-        if attempt < MAX_PAGE_RETRIES:
-            restart_driver()
-
-    return None
-
-
-# ============================================================
-# CONTINUE FLAG
-# ============================================================
 
 def flag_for_continuation():
-    try:
-        with open(CONTINUE_FLAG_FILE, "w", encoding="utf-8") as f:
-            f.write("CONTINUE\n")
-    except Exception as exc:
-        print(f"[ERROR] Could not create continuation flag: {exc}")
+    with open(CONTINUE_FLAG_FILE, 'w', encoding='utf-8') as f:
+        f.write('CONTINUE\n')
 
 
 def clear_continuation_flag():
     try:
         if os.path.exists(CONTINUE_FLAG_FILE):
             os.remove(CONTINUE_FLAG_FILE)
-    except Exception as exc:
-        print(f"[WARN] Could not remove continuation flag: {exc}")
+    except Exception:
+        pass
 
-
-# ============================================================
-# MAIN
-# ============================================================
 
 def main():
     clear_continuation_flag()
     init_csv()
     load_memory()
     load_state()
-
     init_driver()
-
     try:
         while True:
-
             if time_limit_reached():
-                print("[INFO] Time limit reached. Saving state.")
-                save_state()
-                flag_for_continuation()
+                save_state(); flag_for_continuation(); break
+            page = int(state['page'])
+            urls = load_search_page(page)
+            if urls is None:
+                state['consecutive_fails'] = int(state.get('consecutive_fails', 0)) + 1
+                save_state(); flag_for_continuation()
+                print(f'[ERROR] Could not load page {page}. Keeping state on same page.')
                 break
-
-            page_number = int(state["page"])
-
-            doctor_urls = load_search_page(page_number)
-
-            if doctor_urls is None:
-                print(
-                    "[ERROR] Could not load search page after retries. "
-                    "Stopping so the next run can retry the same page."
-                )
-
-                state["consecutive_fails"] = int(
-                    state.get("consecutive_fails", 0)
-                ) + 1
-
-                save_state()
-                flag_for_continuation()
-                break
-
-            state["consecutive_fails"] = 0
-
-            print(
-                f"[INFO] Page {page_number}: "
-                f"found {len(doctor_urls)} doctor profile URLs."
-            )
-
-            for index, doctor_url in enumerate(doctor_urls, start=1):
-
+            state['consecutive_fails'] = 0
+            for n, url in enumerate(urls, 1):
                 if time_limit_reached():
-                    print("[INFO] Time limit reached during profile parsing.")
-                    save_state()
-                    flag_for_continuation()
-                    return
-
-                if is_parsed(doctor_url):
-                    print(
-                        f"  [{index}/{len(doctor_urls)}] "
-                        f"[SKIP] Already parsed: {doctor_url}"
-                    )
+                    save_state(); flag_for_continuation(); return
+                if is_parsed(url):
+                    print(f'  [{n}/{len(urls)}] [SKIP] Already parsed: {url}')
                     continue
-
-                print(
-                    f"  [{index}/{len(doctor_urls)}] "
-                    f"Scraping: {doctor_url}"
-                )
-
-                details = scrape_doctor_profile_myhealth(doctor_url)
-
-                if details:
-                    append_doctor_to_csv(details)
-                    mark_as_parsed(doctor_url)
-
-                    # Save state after EVERY successful doctor.
-                    # If Actions dies, we lose almost nothing.
+                row = scrape_doctor_profile_myhealth(url)
+                if row:
+                    append_csv(row)
+                    mark_as_parsed(url)
                     save_state()
-
-                    print(
-                        f"    [+] Saved: {details['Име']} "
-                        f"| {doctor_url}"
-                    )
+                    print(f"  [{n}/{len(urls)}] [+] Saved: {row['Име']}")
                 else:
-                    print(
-                        f"    [FAIL] Could not parse profile: "
-                        f"{doctor_url}"
-                    )
-
-            # Move only after the whole page has been inspected.
-            state["page"] = page_number + 1
+                    print(f'  [{n}/{len(urls)}] [FAIL] {url}')
+            state['page'] = page + 1
             save_state()
-
-            print(
-                f"[INFO] Finished page {page_number}. "
-                f"Next page: {state['page']}"
-            )
-
+            print(f'[INFO] Finished page {page}. Next page: {state["page"]}')
     finally:
         close_driver()
+    print('[INFO] Scraper session finished.')
 
-    print("\n[INFO] Scraper session finished.")
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     try:
         main()
     except KeyboardInterrupt:
-        print("[INFO] Interrupted by user.")
         close_driver()
+        print('[INFO] Interrupted by user.')
