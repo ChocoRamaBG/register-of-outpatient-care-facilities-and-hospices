@@ -1,15 +1,15 @@
 {
-  "query_idx": 12613,
-  "query": "ЗЧР",
+  "query_idx": 13995,
+  "query": "ЙВЦ",
   "page_num": 0,
   "status": "atexit",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-08-28T15:20:13.825582",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%97%D0%A7%D0%A0&selectedSearchFilter=1",
-  "total_uics": 476398,
+  "last_activity": "2026-08-28T20:41:35.167199",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%99%D0%92%D0%A6&selectedSearchFilter=1",
+  "total_uics": 483920,
   "last_new_uics": 1,
-  "elapsed_seconds": 19544,
+  "elapsed_seconds": 19200,
   "error": null,
-  "saved_at": "2026-08-28T15:20:13.825588",
+  "saved_at": "2026-08-28T20:41:35.167205",
   "save_reason": "atexit"
 }
