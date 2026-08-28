@@ -135,17 +135,22 @@ def init_driver():
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--disable-gpu')
+    options.add_argument('--disable-software-rasterizer')
+    options.add_argument('--disable-extensions')
     options.add_argument('--window-size=1920,1080')
     options.add_argument('--disable-blink-features=AutomationControlled')
     options.add_argument('--log-level=3')
     options.add_argument('--disable-notifications')
     options.add_argument('--disable-popup-blocking')
-    
-    # Смяна на стратегията за зареждане за избягване на сривове при навигация
     options.page_load_strategy = 'eager'
     
+    # Disable downloading images to save massive amounts of RAM
+    # (The HTML tags still exist so we can read 'alt' texts perfectly)
+    prefs = {"profile.managed_default_content_settings.images": 2}
+    options.add_experimental_option("prefs", prefs)
+    
     driver = webdriver.Chrome(options=options)
-    driver.set_page_load_timeout(10)
+    driver.set_page_load_timeout(15)
     driver.set_script_timeout(30)
     print('[INFO] Chrome driver started successfully.')
 
@@ -171,6 +176,37 @@ def close_driver():
     except Exception:
         pass
     driver = None
+
+
+def safe_get(url):
+    """Safely navigates to a URL by recreating the tab to flush memory and kill old JS."""
+    global driver
+    
+    try:
+        driver.execute_script("window.stop();")
+    except Exception:
+        pass
+
+    try:
+        if len(driver.window_handles) >= 1:
+            # Open new blank tab
+            driver.execute_script("window.open('about:blank', '_blank');")
+            new_handle = driver.window_handles[-1]
+            
+            # Close all old tabs
+            for handle in driver.window_handles[:-1]:
+                driver.switch_to.window(handle)
+                driver.close()
+                
+            # Switch focus to the brand new tab
+            driver.switch_to.window(new_handle)
+    except Exception:
+        pass
+
+    try:
+        driver.get(url)
+    except TimeoutException:
+        print('    [WARN] Navigation timeout; continuing to inspect the DOM.')
 
 
 def body_text():
@@ -356,17 +392,7 @@ def load_search_page(page_number):
             return None
         print(f'\n[PAGE {page_number}] Attempt {attempt}/{MAX_PAGE_RETRIES}: {url}')
         try:
-            # Принудително спиране на предишни заявки, за да се предотврати срив
-            try:
-                driver.execute_script("window.stop();")
-            except Exception:
-                pass
-            
-            try:
-                driver.get(url)
-            except TimeoutException:
-                print('[WARN] Navigation timeout; continuing to inspect the DOM.')
-                
+            safe_get(url)
             urls = wait_for_doctor_urls()
             if urls:
                 print(f'[INFO] Page {page_number}: found {len(urls)} doctor profile URLs.')
@@ -387,16 +413,7 @@ def scrape_doctor_profile_myhealth(url):
         try:
             print(f'    [PROFILE {attempt}/{MAX_PROFILE_RETRIES}] {url}')
             
-            # Принудително спиране на предишни заявки, за да се предотврати срив
-            try:
-                driver.execute_script("window.stop();")
-            except Exception:
-                pass
-
-            try:
-                driver.get(url)
-            except TimeoutException:
-                print('    [WARN] Navigation timeout; continuing to inspect the DOM.')
+            safe_get(url)
                 
             WebDriverWait(driver, PROFILE_WAIT_SECONDS).until(
                 EC.presence_of_element_located((By.CLASS_NAME, 'doctor-header'))
@@ -404,9 +421,11 @@ def scrape_doctor_profile_myhealth(url):
             if blocked_page():
                 raise RuntimeError('Blocked / rate-limited profile detected')
             time.sleep(1)
+            
             doc_name = get_text_safe("//div[contains(@class, 'doctor-header')]//h2/a")
             if not doc_name or doc_name == '-':
                 raise RuntimeError('Doctor name not found')
+                
             nzok = 'Да' if driver.find_elements(By.XPATH, "//span[contains(@class, 'ww-nzok')]") else 'Не'
             phones = []
             for link in driver.find_elements(By.XPATH, "//a[contains(@href, 'tel:')]"):
@@ -456,7 +475,6 @@ def clear_continuation_flag():
 
 def main():
     global BASE_SEARCH_URL
-    # Изискваме динамично подаване на линка през терминала
     BASE_SEARCH_URL = input("Моля, въведете базовия URL адрес за търсене (напр. https://myhealth.bg/search/?page=): ").strip()
     while not BASE_SEARCH_URL:
         BASE_SEARCH_URL = input("URL адресът не може да бъде празен. Моля, въведете отново: ").strip()
