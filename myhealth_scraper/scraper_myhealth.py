@@ -46,7 +46,7 @@ fieldnames = [
     "Име", "Специалност", "Рейтинг_Инфо", "Първи свободен час (Общо)", 
     "Телефони", "НЗОК", "Биография", "URL", "Timestamp", "Цени", "Застрахователи"
 ]
-for i in range(1, 5): # Според вашия код, практиките се запълват до 4
+for i in range(1, 5): 
     fieldnames.extend([f"Hospital_{i}", f"Address_{i}", f"First_Free_{i}", f"Coords_{i}"])
 
 if not os.path.exists(csv_file_path):
@@ -116,7 +116,7 @@ def init_driver():
     options.add_argument('--disable-blink-features=AutomationControlled')
     options.add_argument('--log-level=3')
     
-    # Задължителни флагове за работа в GitHub Actions (Headless Linux)
+    # Задължителни флагове за работа в GitHub Actions
     options.add_argument('--headless=new')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
@@ -144,7 +144,7 @@ def close_driver():
     except: pass
 
 # ============================================================
-# ФУНКЦИИ ЗА ЕКСТРАКЦИЯ (БЕЗ ПРОМЯНА ОТ ВАШИЯ КОД)
+# ФУНКЦИИ ЗА ЕКСТРАКЦИЯ
 # ============================================================
 def get_text_safe(xpath, search_context=None, default="-"):
     try:
@@ -355,7 +355,6 @@ def main():
     global BASE_SEARCH_URL
     clear_continuation_flag()
 
-    # Динамично подаване на URL през терминала
     if sys.stdin.isatty():
         try:
             custom_url = input(f"[INPUT] Provide target URL or press Enter to keep default ({BASE_SEARCH_URL}): ").strip()
@@ -380,7 +379,20 @@ def main():
 
         try:
             driver.get(current_url)
-            WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.TAG_NAME, "a")))
+            
+            # ТОВА Е КРИТИЧНИЯТ ФИКС ЗА ГРЕШКАТА В GITHUB ACTIONS:
+            # Чакаме конкретно да се появят линковете КЪМ ЛЕКАРИТЕ, а не просто всякакви линкове.
+            try:
+                WebDriverWait(driver, 15).until(
+                    EC.presence_of_element_located((By.XPATH, "//a[contains(@href, '/lekar/') or contains(@href, '/practices/lekar/')]"))
+                )
+            except:
+                # Ако изтече времето, може би наистина сме на последната страница.
+                pass
+            
+            # Допълнителна пауза за сигурност
+            time.sleep(2)
+            
         except Exception as e:
             print(f"[WARN] Грешка при зареждане на търсачката: {e}")
             state["consecutive_fails"] += 1
