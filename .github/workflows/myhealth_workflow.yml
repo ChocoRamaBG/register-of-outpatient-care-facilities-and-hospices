@@ -7,6 +7,10 @@ on:
         description: "Starting page when no savegame exists"
         required: false
         default: "1"
+      base_url:
+        description: "Base search URL"
+        required: false
+        default: "https://myhealth.bg/search/?page="
 
   schedule:
     - cron: "0 4 * * *"
@@ -29,6 +33,7 @@ jobs:
     env:
       PYTHONUNBUFFERED: "1"
       START_PAGE: ${{ github.event.inputs.start_page || '1' }}
+      BASE_SEARCH_URL: ${{ github.event.inputs.base_url || 'https://myhealth.bg/search/?page=' }}
       TIME_LIMIT_SECONDS: "19440"
     steps:
       - name: Checkout repository
@@ -56,7 +61,7 @@ jobs:
           python -m py_compile scraper_myhealth.py
 
       - name: Execute autonomous scraper
-        run: xvfb-run -a python scraper_myhealth.py
+        run: echo "$BASE_SEARCH_URL" | xvfb-run -a python scraper_myhealth.py
 
       - name: Commit progress and extracted data
         run: |
