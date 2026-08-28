@@ -14,12 +14,13 @@ from selenium.webdriver.support import expected_conditions as EC
 
 START_TIME = time.time()
 TIME_LIMIT_SECONDS = float(os.getenv('TIME_LIMIT_SECONDS', str(5.4 * 60 * 60)))
-BASE_SEARCH_URL = os.getenv('BASE_SEARCH_URL', 'https://myhealth.bg/search/?page=')
 DEFAULT_START_PAGE = int(os.getenv('START_PAGE', '1'))
 MAX_PAGE_RETRIES = 5
 MAX_PROFILE_RETRIES = 3
 PAGE_WAIT_SECONDS = 45
 PROFILE_WAIT_SECONDS = 30
+
+BASE_SEARCH_URL = ""
 
 try:
     SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -131,8 +132,6 @@ def append_csv(row):
 def init_driver():
     global driver
     options = webdriver.ChromeOptions()
-    # Headed Chrome is intentional. The GitHub workflow wraps this in Xvfb
-    # so the environment is much closer to the working local scraper.
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--disable-gpu')
@@ -141,7 +140,10 @@ def init_driver():
     options.add_argument('--log-level=3')
     options.add_argument('--disable-notifications')
     options.add_argument('--disable-popup-blocking')
-    options.page_load_strategy = 'none'
+    
+    # Смяна на стратегията за зареждане за избягване на сривове при навигация
+    options.page_load_strategy = 'eager'
+    
     driver = webdriver.Chrome(options=options)
     driver.set_page_load_timeout(10)
     driver.set_script_timeout(30)
@@ -354,10 +356,17 @@ def load_search_page(page_number):
             return None
         print(f'\n[PAGE {page_number}] Attempt {attempt}/{MAX_PAGE_RETRIES}: {url}')
         try:
+            # Принудително спиране на предишни заявки, за да се предотврати срив
+            try:
+                driver.execute_script("window.stop();")
+            except Exception:
+                pass
+            
             try:
                 driver.get(url)
             except TimeoutException:
                 print('[WARN] Navigation timeout; continuing to inspect the DOM.')
+                
             urls = wait_for_doctor_urls()
             if urls:
                 print(f'[INFO] Page {page_number}: found {len(urls)} doctor profile URLs.')
@@ -377,10 +386,18 @@ def scrape_doctor_profile_myhealth(url):
             return None
         try:
             print(f'    [PROFILE {attempt}/{MAX_PROFILE_RETRIES}] {url}')
+            
+            # Принудително спиране на предишни заявки, за да се предотврати срив
+            try:
+                driver.execute_script("window.stop();")
+            except Exception:
+                pass
+
             try:
                 driver.get(url)
             except TimeoutException:
                 print('    [WARN] Navigation timeout; continuing to inspect the DOM.')
+                
             WebDriverWait(driver, PROFILE_WAIT_SECONDS).until(
                 EC.presence_of_element_located((By.CLASS_NAME, 'doctor-header'))
             )
@@ -438,6 +455,12 @@ def clear_continuation_flag():
 
 
 def main():
+    global BASE_SEARCH_URL
+    # Изискваме динамично подаване на линка през терминала
+    BASE_SEARCH_URL = input("Моля, въведете базовия URL адрес за търсене (напр. https://myhealth.bg/search/?page=): ").strip()
+    while not BASE_SEARCH_URL:
+        BASE_SEARCH_URL = input("URL адресът не може да бъде празен. Моля, въведете отново: ").strip()
+
     clear_continuation_flag()
     init_csv()
     load_memory()
