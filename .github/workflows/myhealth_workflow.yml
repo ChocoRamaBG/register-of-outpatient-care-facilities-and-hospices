@@ -6,10 +6,10 @@ on:
       start_page:
         description: "Starting page when no savegame exists"
         required: false
-        default: "164"
+        default: "1"
 
   schedule:
-    - cron: "0 4 * * *"  # 04:00 UTC = 07:00 Bulgaria during EEST
+    - cron: "0 4 * * *"
 
 concurrency:
   group: myhealth-scraper
@@ -23,16 +23,13 @@ jobs:
   run-pipeline:
     runs-on: ubuntu-latest
     timeout-minutes: 360
-
     defaults:
       run:
         working-directory: ./myhealth_scraper
-
     env:
       PYTHONUNBUFFERED: "1"
-      START_PAGE: ${{ github.event.inputs.start_page || '164' }}
-      TIME_LIMIT_SECONDS: "19440"  # 5h 24m
-
+      START_PAGE: ${{ github.event.inputs.start_page || '1' }}
+      TIME_LIMIT_SECONDS: "19440"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -49,38 +46,36 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install --upgrade selenium
+          sudo apt-get update
+          sudo apt-get install -y xvfb
 
-      - name: Verify Chrome and Python
+      - name: Verify environment
         run: |
           python --version
           google-chrome --version || true
           python -m py_compile scraper_myhealth.py
 
       - name: Execute autonomous scraper
-        run: python scraper_myhealth.py
+        run: xvfb-run -a python scraper_myhealth.py
 
       - name: Commit progress and extracted data
         run: |
           set -e
-
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
           mkdir -p myhealth_outputs
-
-          # Always keep these files under version control so the next run
-          # can resume from exactly where the previous run stopped.
           touch myhealth_outputs/parsed_urls_myhealth.txt
 
-          # Get any remote changes before creating the commit.
-          git pull --rebase origin main
-
+          # The scraper modifies these files before this step. Stage FIRST,
+          # otherwise git pull --rebase refuses to run because the working
+          # tree contains unstaged scraper output.
           git add myhealth_outputs/
 
           if git diff --cached --quiet; then
             echo "No new changes to commit."
           else
             git commit -m "Auto-save state: update myhealth.bg scraper data"
+            git pull --rebase --autostash origin main
             git push origin HEAD:main
           fi
 
@@ -100,5 +95,4 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh workflow run "(myhealth.bg) Autonomous Registry Scraper" \
-            --ref main
+          gh workflow run "(myhealth.bg) Autonomous Registry Scraper" --ref main
