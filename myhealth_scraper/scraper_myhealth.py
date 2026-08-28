@@ -11,6 +11,8 @@ from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 
 START_TIME = time.time()
 TIME_LIMIT_SECONDS = float(os.getenv('TIME_LIMIT_SECONDS', str(5.4 * 60 * 60)))
@@ -18,7 +20,7 @@ DEFAULT_START_PAGE = int(os.getenv('START_PAGE', '1'))
 MAX_PAGE_RETRIES = 5
 MAX_PROFILE_RETRIES = 3
 PAGE_WAIT_SECONDS = 45
-PROFILE_WAIT_SECONDS = 30
+PROFILE_WAIT_SECONDS = 15
 
 BASE_SEARCH_URL = ""
 
@@ -132,27 +134,23 @@ def append_csv(row):
 def init_driver():
     global driver
     options = webdriver.ChromeOptions()
+    # Core Linux requirements
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--disable-gpu')
-    options.add_argument('--disable-software-rasterizer')
-    options.add_argument('--disable-extensions')
-    options.add_argument('--window-size=1920,1080')
+    
+    # Settings from your successful PC script
+    options.add_argument('--start-maximized')
     options.add_argument('--disable-blink-features=AutomationControlled')
     options.add_argument('--log-level=3')
-    options.add_argument('--disable-notifications')
-    options.add_argument('--disable-popup-blocking')
-    options.page_load_strategy = 'eager'
     
-    # Disable downloading images to save massive amounts of RAM
-    # (The HTML tags still exist so we can read 'alt' texts perfectly)
-    prefs = {"profile.managed_default_content_settings.images": 2}
-    options.add_experimental_option("prefs", prefs)
-    
-    driver = webdriver.Chrome(options=options)
-    driver.set_page_load_timeout(15)
-    driver.set_script_timeout(30)
-    print('[INFO] Chrome driver started successfully.')
+    try:
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=options)
+        driver.set_page_load_timeout(30)
+        print('[INFO] Chrome driver started successfully with webdriver-manager.')
+    except Exception as e:
+        print(f'[ERROR] Failed to start Chrome driver: {e}')
+        raise e
 
 
 def restart_driver():
@@ -176,37 +174,6 @@ def close_driver():
     except Exception:
         pass
     driver = None
-
-
-def safe_get(url):
-    """Safely navigates to a URL by recreating the tab to flush memory and kill old JS."""
-    global driver
-    
-    try:
-        driver.execute_script("window.stop();")
-    except Exception:
-        pass
-
-    try:
-        if len(driver.window_handles) >= 1:
-            # Open new blank tab
-            driver.execute_script("window.open('about:blank', '_blank');")
-            new_handle = driver.window_handles[-1]
-            
-            # Close all old tabs
-            for handle in driver.window_handles[:-1]:
-                driver.switch_to.window(handle)
-                driver.close()
-                
-            # Switch focus to the brand new tab
-            driver.switch_to.window(new_handle)
-    except Exception:
-        pass
-
-    try:
-        driver.get(url)
-    except TimeoutException:
-        print('    [WARN] Navigation timeout; continuing to inspect the DOM.')
 
 
 def body_text():
@@ -392,7 +359,7 @@ def load_search_page(page_number):
             return None
         print(f'\n[PAGE {page_number}] Attempt {attempt}/{MAX_PAGE_RETRIES}: {url}')
         try:
-            safe_get(url)
+            driver.get(url)
             urls = wait_for_doctor_urls()
             if urls:
                 print(f'[INFO] Page {page_number}: found {len(urls)} doctor profile URLs.')
@@ -413,14 +380,16 @@ def scrape_doctor_profile_myhealth(url):
         try:
             print(f'    [PROFILE {attempt}/{MAX_PROFILE_RETRIES}] {url}')
             
-            safe_get(url)
-                
+            driver.get(url)
+            
+            # Use the exact waiting logic from the PC script
             WebDriverWait(driver, PROFILE_WAIT_SECONDS).until(
                 EC.presence_of_element_located((By.CLASS_NAME, 'doctor-header'))
             )
+            time.sleep(1.0)
+            
             if blocked_page():
                 raise RuntimeError('Blocked / rate-limited profile detected')
-            time.sleep(1)
             
             doc_name = get_text_safe("//div[contains(@class, 'doctor-header')]//h2/a")
             if not doc_name or doc_name == '-':
