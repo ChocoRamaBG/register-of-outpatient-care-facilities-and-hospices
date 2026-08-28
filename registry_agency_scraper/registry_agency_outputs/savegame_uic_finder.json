@@ -1,15 +1,15 @@
 {
-  "query_idx": 8658,
-  "query": "ГЫЭ",
+  "query_idx": 9907,
+  "query": "ЕВЮ",
   "page_num": 0,
   "status": "atexit",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-08-27T23:09:39.924553",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%93%D0%AB%D0%AD&selectedSearchFilter=1",
-  "total_uics": 448929,
-  "last_new_uics": 2,
-  "elapsed_seconds": 19202,
+  "last_activity": "2026-08-28T04:30:53.859504",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%95%D0%92%D0%AE&selectedSearchFilter=1",
+  "total_uics": 460428,
+  "last_new_uics": 3,
+  "elapsed_seconds": 19203,
   "error": null,
-  "saved_at": "2026-08-27T23:09:39.924559",
+  "saved_at": "2026-08-28T04:30:53.859509",
   "save_reason": "atexit"
 }

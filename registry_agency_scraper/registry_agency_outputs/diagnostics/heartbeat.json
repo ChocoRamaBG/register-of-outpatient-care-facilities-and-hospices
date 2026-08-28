@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-08-27T23:09:37.366406",
+  "timestamp": "2026-08-28T04:30:50.788734",
   "elapsed_seconds": 19200,
-  "query_idx": 8657,
-  "query": "ГЫЭ",
+  "query_idx": 9906,
+  "query": "ЕВЮ",
   "page_num": 0,
   "status": "goto",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%93%D0%AB%D0%AD&selectedSearchFilter=1",
-  "total_uics": 448929,
-  "last_new_uics": 2
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%95%D0%92%D0%AE&selectedSearchFilter=1",
+  "total_uics": 460428,
+  "last_new_uics": 3
 }
