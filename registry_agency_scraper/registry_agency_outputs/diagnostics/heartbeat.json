@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-08-29T07:24:29.258106",
+  "timestamp": "2026-08-29T12:46:13.421645",
   "elapsed_seconds": 19200,
-  "query_idx": 16439,
-  "query": "ЛПГ",
-  "page_num": 0,
-  "status": "goto",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%9B%D0%9F%D0%93&selectedSearchFilter=1",
-  "total_uics": 497111,
-  "last_new_uics": 2
+  "query_idx": 17546,
+  "query": "МСЦ",
+  "page_num": 1,
+  "status": "time_limit_pagination",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%9C%D0%A1%D0%A6&selectedSearchFilter=1",
+  "total_uics": 508770,
+  "last_new_uics": 6
 }
