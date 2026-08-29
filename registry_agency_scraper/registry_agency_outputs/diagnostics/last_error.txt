@@ -1,19 +1,19 @@
-Timestamp: 2026-08-28T20:40:53.316511
-Label: query=ЙВЦ, retry=1
+Timestamp: 2026-08-29T02:02:45.702431
+Label: query=КОТ, retry=1
 Exception: RuntimeError('RATE_LIMIT')
 
 STATE:
 {
-  "query_idx": 13994,
-  "query": "ЙВЦ",
+  "query_idx": 15398,
+  "query": "КОТ",
   "page_num": 0,
   "status": "goto",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-08-28T20:40:51.809264",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%99%D0%92%D0%A6&selectedSearchFilter=1",
-  "total_uics": 483920,
-  "last_new_uics": 1,
-  "elapsed_seconds": 19156,
+  "last_activity": "2026-08-29T02:02:44.191963",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%9A%D0%9E%D0%A2&selectedSearchFilter=1",
+  "total_uics": 492055,
+  "last_new_uics": 10,
+  "elapsed_seconds": 19184,
   "error": null
 }
 
