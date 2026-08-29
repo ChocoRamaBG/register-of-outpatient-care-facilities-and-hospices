@@ -1,15 +1,15 @@
 {
-  "query_idx": 15398,
-  "query": "КОТ",
+  "query_idx": 16439,
+  "query": "ЛПГ",
   "page_num": 1,
   "status": "atexit",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-08-29T02:03:19.219619",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%9A%D0%9E%D0%A2&selectedSearchFilter=1",
-  "total_uics": 492055,
-  "last_new_uics": 10,
-  "elapsed_seconds": 19219,
+  "last_activity": "2026-08-29T07:24:57.994690",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%9B%D0%9F%D0%93&selectedSearchFilter=1",
+  "total_uics": 497111,
+  "last_new_uics": 2,
+  "elapsed_seconds": 19229,
   "error": null,
-  "saved_at": "2026-08-29T02:03:19.219638",
+  "saved_at": "2026-08-29T07:24:57.994696",
   "save_reason": "atexit"
 }
