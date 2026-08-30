@@ -1,19 +1,19 @@
-Timestamp: 2026-08-30T10:12:26.278642
-Label: query=СЛЧ, retry=1
+Timestamp: 2026-08-30T15:33:29.000762
+Label: query=ТФХ, retry=1
 Exception: RuntimeError('RATE_LIMIT')
 
 STATE:
 {
-  "query_idx": 22475,
-  "query": "СЛЧ",
+  "query_idx": 23785,
+  "query": "ТФХ",
   "page_num": 0,
   "status": "goto",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-08-30T10:12:24.773311",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A1%D0%9B%D0%A7&selectedSearchFilter=1",
-  "total_uics": 537730,
+  "last_activity": "2026-08-30T15:33:27.494654",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A2%D0%A4%D0%A5&selectedSearchFilter=1",
+  "total_uics": 550282,
   "last_new_uics": 1,
-  "elapsed_seconds": 19186,
+  "elapsed_seconds": 19124,
   "error": null
 }
 

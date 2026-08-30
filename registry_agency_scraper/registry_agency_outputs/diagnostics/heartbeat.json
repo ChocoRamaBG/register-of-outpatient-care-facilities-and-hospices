@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-08-30T10:12:38.378596",
+  "timestamp": "2026-08-30T15:34:43.392412",
   "elapsed_seconds": 19200,
-  "query_idx": 22475,
-  "query": "СЛЧ",
+  "query_idx": 23789,
+  "query": "ТФЩ",
   "page_num": 0,
-  "status": "rate_limited",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A1%D0%9B%D0%A7&selectedSearchFilter=1",
-  "total_uics": 537730,
+  "status": "goto",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A2%D0%A4%D0%A9&selectedSearchFilter=1",
+  "total_uics": 550282,
   "last_new_uics": 1
 }
