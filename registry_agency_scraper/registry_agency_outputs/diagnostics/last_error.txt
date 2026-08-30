@@ -1,47 +1,25 @@
-Timestamp: 2026-08-30T04:49:53.025216
-Label: query=РКЕ, retry=2
+Timestamp: 2026-08-30T10:12:26.278642
+Label: query=СЛЧ, retry=1
 Exception: RuntimeError('RATE_LIMIT')
 
 STATE:
 {
-  "query_idx": 21401,
-  "query": "РКЕ",
+  "query_idx": 22475,
+  "query": "СЛЧ",
   "page_num": 0,
   "status": "goto",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-08-30T04:49:43.513303",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A0%D0%9A%D0%95&selectedSearchFilter=1",
-  "total_uics": 530493,
-  "last_new_uics": 4,
-  "elapsed_seconds": 19145,
+  "last_activity": "2026-08-30T10:12:24.773311",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A1%D0%9B%D0%A7&selectedSearchFilter=1",
+  "total_uics": 537730,
+  "last_new_uics": 1,
+  "elapsed_seconds": 19186,
   "error": null
 }
 
 TRACEBACK:
 Traceback (most recent call last):
-  File "/home/runner/work/register-of-outpatient-care-facilities-and-hospices/register-of-outpatient-care-facilities-and-hospices/registry_agency_scraper/eik_extractor.py", line 853, in main
-    page.wait_for_selector(
-  File "/opt/hostedtoolcache/Python/3.10.21/x64/lib/python3.10/site-packages/playwright/sync_api/_generated.py", line 9033, in wait_for_selector
-    self._sync(
-  File "/opt/hostedtoolcache/Python/3.10.21/x64/lib/python3.10/site-packages/playwright/_impl/_sync_base.py", line 115, in _sync
-    return task.result()
-  File "/opt/hostedtoolcache/Python/3.10.21/x64/lib/python3.10/site-packages/playwright/_impl/_page.py", line 427, in wait_for_selector
-    return await self._main_frame.wait_for_selector(**locals_to_params(locals()))
-  File "/opt/hostedtoolcache/Python/3.10.21/x64/lib/python3.10/site-packages/playwright/_impl/_frame.py", line 394, in wait_for_selector
-    await self._channel.send(
-  File "/opt/hostedtoolcache/Python/3.10.21/x64/lib/python3.10/site-packages/playwright/_impl/_connection.py", line 76, in send
-    return await self._connection.wrap_api_call(
-  File "/opt/hostedtoolcache/Python/3.10.21/x64/lib/python3.10/site-packages/playwright/_impl/_connection.py", line 632, in wrap_api_call
-    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
-playwright._impl._errors.TimeoutError: Page.wait_for_selector: Timeout 8000ms exceeded.
-Call log:
-  - waiting for locator("table.table-collapsible tbody tr") to be visible
-
-
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
-  File "/home/runner/work/register-of-outpatient-care-facilities-and-hospices/register-of-outpatient-care-facilities-and-hospices/registry_agency_scraper/eik_extractor.py", line 863, in main
+  File "/home/runner/work/register-of-outpatient-care-facilities-and-hospices/register-of-outpatient-care-facilities-and-hospices/registry_agency_scraper/eik_extractor.py", line 843, in main
     raise RuntimeError(
 RuntimeError: RATE_LIMIT
 
