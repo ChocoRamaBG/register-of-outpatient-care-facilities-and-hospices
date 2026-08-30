@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-08-30T15:34:43.392412",
-  "elapsed_seconds": 19200,
-  "query_idx": 23789,
-  "query": "ТФЩ",
+  "timestamp": "2026-08-30T21:00:52.669131",
+  "elapsed_seconds": 19470,
+  "query_idx": 25195,
+  "query": "ФАЧ",
   "page_num": 0,
   "status": "goto",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A2%D0%A4%D0%A9&selectedSearchFilter=1",
-  "total_uics": 550282,
-  "last_new_uics": 1
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A4%D0%90%D0%A7&selectedSearchFilter=1",
+  "total_uics": 552888,
+  "last_new_uics": 7
 }
