@@ -1,19 +1,19 @@
-Timestamp: 2026-08-29T23:27:59.044045
-Label: query=ПВФ, retry=2
+Timestamp: 2026-08-30T04:49:53.025216
+Label: query=РКЕ, retry=2
 Exception: RuntimeError('RATE_LIMIT')
 
 STATE:
 {
-  "query_idx": 20136,
-  "query": "ПВФ",
+  "query_idx": 21401,
+  "query": "РКЕ",
   "page_num": 0,
   "status": "goto",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-08-29T23:27:49.532437",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%9F%D0%92%D0%A4&selectedSearchFilter=1",
-  "total_uics": 519850,
+  "last_activity": "2026-08-30T04:49:43.513303",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A0%D0%9A%D0%95&selectedSearchFilter=1",
+  "total_uics": 530493,
   "last_new_uics": 4,
-  "elapsed_seconds": 19126,
+  "elapsed_seconds": 19145,
   "error": null
 }
 
