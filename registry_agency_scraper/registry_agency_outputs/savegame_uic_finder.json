@@ -1,15 +1,15 @@
 {
-  "query_idx": 27240,
-  "query": "ЦАУ",
+  "query_idx": 28550,
+  "query": "ЧЙС",
   "page_num": 0,
   "status": "atexit",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-08-31T07:44:24.369022",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A6%D0%90%D0%A3&selectedSearchFilter=1",
-  "total_uics": 558584,
-  "last_new_uics": 3,
-  "elapsed_seconds": 19231,
+  "last_activity": "2026-08-31T13:09:20.261418",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A7%D0%99%D0%A1&selectedSearchFilter=1",
+  "total_uics": 559483,
+  "last_new_uics": 1,
+  "elapsed_seconds": 19403,
   "error": null,
-  "saved_at": "2026-08-31T07:44:24.369028",
+  "saved_at": "2026-08-31T13:09:20.261422",
   "save_reason": "atexit"
 }
