@@ -1,19 +1,19 @@
-Timestamp: 2026-08-31T02:21:41.740978
-Label: query=ХАП, retry=1
+Timestamp: 2026-08-31T07:43:42.362112
+Label: query=ЦАУ, retry=1
 Exception: RuntimeError('RATE_LIMIT')
 
 STATE:
 {
-  "query_idx": 26211,
-  "query": "ХАП",
+  "query_idx": 27239,
+  "query": "ЦАУ",
   "page_num": 0,
   "status": "goto",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-08-31T02:21:40.232394",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A5%D0%90%D0%9F&selectedSearchFilter=1",
-  "total_uics": 556258,
-  "last_new_uics": 1,
-  "elapsed_seconds": 19158,
+  "last_activity": "2026-08-31T07:43:40.855336",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A6%D0%90%D0%A3&selectedSearchFilter=1",
+  "total_uics": 558584,
+  "last_new_uics": 3,
+  "elapsed_seconds": 19187,
   "error": null
 }
 
