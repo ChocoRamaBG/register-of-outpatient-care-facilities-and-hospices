@@ -1,15 +1,15 @@
 {
-  "query_idx": 28550,
-  "query": "ЧЙС",
-  "page_num": 0,
+  "query_idx": 29696,
+  "query": "ШНМ",
+  "page_num": 1,
   "status": "atexit",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-08-31T13:09:20.261418",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A7%D0%99%D0%A1&selectedSearchFilter=1",
-  "total_uics": 559483,
+  "last_activity": "2026-08-31T18:30:51.623737",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A8%D0%9D%D0%9C&selectedSearchFilter=1",
+  "total_uics": 560169,
   "last_new_uics": 1,
-  "elapsed_seconds": 19403,
+  "elapsed_seconds": 19200,
   "error": null,
-  "saved_at": "2026-08-31T13:09:20.261422",
+  "saved_at": "2026-08-31T18:30:51.623756",
   "save_reason": "atexit"
 }
