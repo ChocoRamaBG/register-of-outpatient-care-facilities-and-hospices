@@ -1,103 +1,103 @@
-name: "(myhealth.bg) Autonomous Registry Scraper"
+# name: "(myhealth.bg) Autonomous Registry Scraper"
 
-on:
-  workflow_dispatch:
-    inputs:
-      start_page:
-        description: "Starting page when no savegame exists"
-        required: false
-        default: "1"
-      base_url:
-        description: "Base search URL"
-        required: false
-        default: "https://myhealth.bg/search/?page="
+# on:
+#   workflow_dispatch:
+#     inputs:
+#       start_page:
+#         description: "Starting page when no savegame exists"
+#         required: false
+#         default: "1"
+#       base_url:
+#         description: "Base search URL"
+#         required: false
+#         default: "https://myhealth.bg/search/?page="
 
-  schedule:
-    - cron: "0 4 * * *"
+#   schedule:
+#     - cron: "0 4 * * *"
 
-concurrency:
-  group: myhealth-scraper
-  cancel-in-progress: false
+# concurrency:
+#   group: myhealth-scraper
+#   cancel-in-progress: false
 
-permissions:
-  contents: write
-  actions: write
+# permissions:
+#   contents: write
+#   actions: write
 
-jobs:
-  run-pipeline:
-    runs-on: ubuntu-latest
-    timeout-minutes: 360
-    defaults:
-      run:
-        working-directory: ./myhealth_scraper
-    env:
-      PYTHONUNBUFFERED: "1"
-      START_PAGE: ${{ github.event.inputs.start_page || '1' }}
-      BASE_SEARCH_URL: ${{ github.event.inputs.base_url || 'https://myhealth.bg/search/?page=' }}
-      TIME_LIMIT_SECONDS: "19440"
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+# jobs:
+#   run-pipeline:
+#     runs-on: ubuntu-latest
+#     timeout-minutes: 360
+#     defaults:
+#       run:
+#         working-directory: ./myhealth_scraper
+#     env:
+#       PYTHONUNBUFFERED: "1"
+#       START_PAGE: ${{ github.event.inputs.start_page || '1' }}
+#       BASE_SEARCH_URL: ${{ github.event.inputs.base_url || 'https://myhealth.bg/search/?page=' }}
+#       TIME_LIMIT_SECONDS: "19440"
+#     steps:
+#       - name: Checkout repository
+#         uses: actions/checkout@v4
+#         with:
+#           fetch-depth: 0
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-          cache: "pip"
+#       - name: Set up Python
+#         uses: actions/setup-python@v5
+#         with:
+#           python-version: "3.10"
+#           cache: "pip"
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install --upgrade selenium webdriver-manager
-          sudo apt-get update
-          sudo apt-get install -y xvfb
+#       - name: Install dependencies
+#         run: |
+#           python -m pip install --upgrade pip
+#           python -m pip install --upgrade selenium webdriver-manager
+#           sudo apt-get update
+#           sudo apt-get install -y xvfb
 
-      - name: Verify environment
-        run: |
-          python --version
-          google-chrome --version || true
-          python -m py_compile scraper_myhealth.py
+#       - name: Verify environment
+#         run: |
+#           python --version
+#           google-chrome --version || true
+#           python -m py_compile scraper_myhealth.py
 
-      - name: Execute autonomous scraper
-        run: echo "$BASE_SEARCH_URL" | xvfb-run -a python scraper_myhealth.py
+#       - name: Execute autonomous scraper
+#         run: echo "$BASE_SEARCH_URL" | xvfb-run -a python scraper_myhealth.py
 
-      - name: Commit progress and extracted data
-        run: |
-          set -e
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          mkdir -p myhealth_outputs
-          touch myhealth_outputs/parsed_urls_myhealth.txt
+#       - name: Commit progress and extracted data
+#         run: |
+#           set -e
+#           git config user.name "github-actions[bot]"
+#           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+#           mkdir -p myhealth_outputs
+#           touch myhealth_outputs/parsed_urls_myhealth.txt
 
-          # The scraper modifies these files before this step. Stage FIRST,
-          # otherwise git pull --rebase refuses to run because the working
-          # tree contains unstaged scraper output.
-          git add myhealth_outputs/
+#           # The scraper modifies these files before this step. Stage FIRST,
+#           # otherwise git pull --rebase refuses to run because the working
+#           # tree contains unstaged scraper output.
+#           git add myhealth_outputs/
 
-          if git diff --cached --quiet; then
-            echo "No new changes to commit."
-          else
-            git commit -m "Auto-save state: update myhealth.bg scraper data"
-            git pull --rebase --autostash origin main
-            git push origin HEAD:main
-          fi
+#           if git diff --cached --quiet; then
+#             echo "No new changes to commit."
+#           else
+#             git commit -m "Auto-save state: update myhealth.bg scraper data"
+#             git pull --rebase --autostash origin main
+#             git push origin HEAD:main
+#           fi
 
-      - name: Check continuation flag
-        id: continuation
-        run: |
-          if [ -f "myhealth_outputs/CONTINUE_FLAG_MYHEALTH" ]; then
-            echo "continue=true" >> "$GITHUB_OUTPUT"
-            echo "Continue flag detected."
-          else
-            echo "continue=false" >> "$GITHUB_OUTPUT"
-            echo "No continue flag detected."
-          fi
+#       - name: Check continuation flag
+#         id: continuation
+#         run: |
+#           if [ -f "myhealth_outputs/CONTINUE_FLAG_MYHEALTH" ]; then
+#             echo "continue=true" >> "$GITHUB_OUTPUT"
+#             echo "Continue flag detected."
+#           else
+#             echo "continue=false" >> "$GITHUB_OUTPUT"
+#             echo "No continue flag detected."
+#           fi
 
-      - name: Trigger next run
-        if: steps.continuation.outputs.continue == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh workflow run "(myhealth.bg) Autonomous Registry Scraper" --ref main
+#       - name: Trigger next run
+#         if: steps.continuation.outputs.continue == 'true'
+#         env:
+#           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#         run: |
+#           gh workflow run "(myhealth.bg) Autonomous Registry Scraper" --ref main
