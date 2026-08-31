@@ -1,19 +1,19 @@
-Timestamp: 2026-08-31T18:29:58.978835
-Label: query=ШНК, retry=1
+Timestamp: 2026-08-31T23:52:50.661137
+Label: query=ЩФЪ, retry=1
 Exception: RuntimeError('RATE_LIMIT')
 
 STATE:
 {
-  "query_idx": 29694,
-  "query": "ШНК",
+  "query_idx": 30958,
+  "query": "ЩФЪ",
   "page_num": 0,
   "status": "goto",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-08-31T18:29:57.472044",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A8%D0%9D%D0%9A&selectedSearchFilter=1",
-  "total_uics": 560169,
-  "last_new_uics": 1,
-  "elapsed_seconds": 19146,
+  "last_activity": "2026-08-31T23:52:49.153744",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A9%D0%A4%D0%AA&selectedSearchFilter=1",
+  "total_uics": 561238,
+  "last_new_uics": 2,
+  "elapsed_seconds": 19114,
   "error": null
 }
 
