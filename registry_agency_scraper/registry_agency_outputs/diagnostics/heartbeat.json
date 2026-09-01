@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-09-01T10:37:41.562175",
+  "timestamp": "2026-09-01T15:59:37.935495",
   "elapsed_seconds": 19200,
-  "query_idx": 33713,
-  "query": "ЬКЭ",
+  "query_idx": 34827,
+  "query": "ЭНЧ",
   "page_num": 0,
   "status": "goto",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%AC%D0%9A%D0%AD&selectedSearchFilter=1",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%AD%D0%9D%D0%A7&selectedSearchFilter=1",
   "total_uics": 561275,
   "last_new_uics": 1
 }
