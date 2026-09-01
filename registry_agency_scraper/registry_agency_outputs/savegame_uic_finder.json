@@ -1,15 +1,15 @@
 {
-  "query_idx": 34828,
-  "query": "ЭНЧ",
+  "query_idx": 36286,
+  "query": "ЮЫЙ",
   "page_num": 0,
   "status": "atexit",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-09-01T15:59:45.127698",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%AD%D0%9D%D0%A7&selectedSearchFilter=1",
-  "total_uics": 561275,
-  "last_new_uics": 1,
-  "elapsed_seconds": 19207,
+  "last_activity": "2026-09-01T21:22:34.423202",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%AE%D0%AB%D0%99&selectedSearchFilter=1",
+  "total_uics": 562404,
+  "last_new_uics": 3,
+  "elapsed_seconds": 19219,
   "error": null,
-  "saved_at": "2026-09-01T15:59:45.127707",
+  "saved_at": "2026-09-01T21:22:34.423209",
   "save_reason": "atexit"
 }

@@ -1,19 +1,19 @@
-Timestamp: 2026-09-01T15:58:53.883421
-Label: query=ЭНЦ, retry=1
+Timestamp: 2026-09-01T21:21:52.959568
+Label: query=ЮЫЙ, retry=1
 Exception: RuntimeError('RATE_LIMIT')
 
 STATE:
 {
-  "query_idx": 34826,
-  "query": "ЭНЦ",
+  "query_idx": 36285,
+  "query": "ЮЫЙ",
   "page_num": 0,
   "status": "goto",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-09-01T15:58:52.376400",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%AD%D0%9D%D0%A6&selectedSearchFilter=1",
-  "total_uics": 561275,
-  "last_new_uics": 1,
-  "elapsed_seconds": 19154,
+  "last_activity": "2026-09-01T21:21:51.452158",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%AE%D0%AB%D0%99&selectedSearchFilter=1",
+  "total_uics": 562404,
+  "last_new_uics": 3,
+  "elapsed_seconds": 19176,
   "error": null
 }
 
