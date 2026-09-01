@@ -1,19 +1,19 @@
-Timestamp: 2026-09-01T05:14:58.255398
-Label: query=ЫББ, retry=1
+Timestamp: 2026-09-01T10:36:58.474314
+Label: query=ЬКЬ, retry=1
 Exception: RuntimeError('RATE_LIMIT')
 
 STATE:
 {
-  "query_idx": 32373,
-  "query": "ЫББ",
+  "query_idx": 33712,
+  "query": "ЬКЬ",
   "page_num": 0,
   "status": "goto",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-09-01T05:14:56.748247",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%AB%D0%91%D0%91&selectedSearchFilter=1",
+  "last_activity": "2026-09-01T10:36:56.967456",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%AC%D0%9A%D0%AC&selectedSearchFilter=1",
   "total_uics": 561275,
   "last_new_uics": 1,
-  "elapsed_seconds": 19137,
+  "elapsed_seconds": 19155,
   "error": null
 }
 
