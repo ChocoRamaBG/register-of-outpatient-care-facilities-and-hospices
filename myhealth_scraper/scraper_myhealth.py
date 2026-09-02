@@ -41,7 +41,6 @@ FIELDNAMES = [
     'Име', 'Специалност', 'Рейтинг_Инфо', 'Първи свободен час (Общо)',
     'Телефони', 'НЗОК', 'Биография', 'URL', 'Timestamp', 'Цени', 'Застрахователи'
 ]
-# Корекция: Увеличен обхват до 6, за да покрива индекси от 1 до 5 (включително)
 for i in range(1, 6):
     FIELDNAMES += [f'Hospital_{i}', f'Address_{i}', f'First_Free_{i}', f'Coords_{i}']
 
@@ -136,12 +135,17 @@ def append_csv(row):
 def init_driver():
     global driver
     options = webdriver.ChromeOptions()
+    
+    # Стратегия 'eager': връща контрол веднага щом DOM дървото се зареди.
+    options.page_load_strategy = 'eager'
+    
+    # Задължителни флагове за стабилност в GitHub Actions
+    options.add_argument('--headless=new')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
-    
-    # Корекция: Специфични опции за по-добра стабилност в GitHub Actions (Xvfb)
-    options.add_argument('--window-size=1920,1080')
     options.add_argument('--disable-gpu')
+    options.add_argument('--disable-software-rasterizer')
+    options.add_argument('--window-size=1920,1080')
     options.add_argument('--disable-blink-features=AutomationControlled')
     options.add_argument('--log-level=3')
     options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
@@ -150,7 +154,7 @@ def init_driver():
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=options)
         driver.set_page_load_timeout(30)
-        print('[INFO] Chrome driver started successfully with webdriver-manager.')
+        print('[INFO] Chrome driver started successfully.')
     except Exception as e:
         print(f'[ERROR] Failed to start Chrome driver: {e}')
         raise e
@@ -272,7 +276,8 @@ def scrape_practices_detailed():
             dates = box.find_elements(By.CLASS_NAME, 'dummy--detailed-profile-card__practices-fa')
             if len(titles) == len(dates):
                 for title, date_el in zip(titles, dates):
-                    key = re.sub(r'\s+', '', title.text.strip().lower())
+                    # Премахване на интервали и пунктуация
+                    key = re.sub(r'[\s,"\'\-\.]', '', title.text.strip().lower())
                     raw = date_el.get_attribute('data-date')
                     value = raw.replace('T', ' ').split('+')[0] if raw else date_el.text.strip()
                     if key:
@@ -285,9 +290,12 @@ def scrape_practices_detailed():
             try:
                 name = wp.find_element(By.CLASS_NAME, 'doctor-details__workplace-item-title').text.strip()
                 address = wp.find_element(By.CLASS_NAME, 'doctor-details__workplace-item-address').text.strip()
-                full = re.sub(r'\s+', '', (name + address).lower())
-                addr = re.sub(r'\s+', '', address.lower())
+                
+                # Премахване на интервали и пунктуация и тук
+                full = re.sub(r'[\s,"\'\-\.]', '', (name + address).lower())
+                addr = re.sub(r'[\s,"\'\-\.]', '', address.lower())
                 first = 'Няма свободни часове'
+                
                 for key, value in dates_map.items():
                     if key and (key in full or full in key):
                         first = value
@@ -295,6 +303,7 @@ def scrape_practices_detailed():
                     if addr and len(addr) > 5 and addr in key:
                         first = value
                         break
+                        
                 results.append({'Hospital': name, 'Address': address, 'First_Date': first, 'Coords': get_coordinates_from_map_link(wp)})
             except Exception:
                 pass
@@ -394,7 +403,6 @@ def scrape_doctor_profile_myhealth(url):
                 raise RuntimeError('Blocked / rate-limited profile detected')
             
             doc_name = get_text_safe("//div[contains(@class, 'doctor-header')]//h2/a")
-            # Корекция: Не прекратяваме изпълнението, ако липсва име (уеднаквено с PC скрипта)
             if not doc_name or doc_name == '-':
                 print(f'    [WARN] Doctor name not found for {url}.')
                 doc_name = '-'
@@ -422,7 +430,6 @@ def scrape_doctor_profile_myhealth(url):
                 'Застрахователи': scrape_insurances_myhealth(),
             }
             
-            # Корекция: Индексиране до 5 практики
             for i in range(1, 6):
                 p = practices[i - 1] if i <= len(practices) else None
                 row[f'Hospital_{i}'] = p['Hospital'] if p else '-'
@@ -454,19 +461,15 @@ def clear_continuation_flag():
 def main():
     global BASE_SEARCH_URL
     
-    # Корекция: Интелигентно прочитане на входните данни
-    # 1. Приоритетно проверяваме environment променливите (за YAML интеграцията)
     env_url = os.getenv('BASE_SEARCH_URL', '').strip()
     if env_url:
         BASE_SEARCH_URL = env_url
     else:
-        # 2. Ако няма променлива, проверяваме дали скриптът се изпълнява интерактивно (локално)
         if sys.stdin.isatty():
             BASE_SEARCH_URL = input("Моля, въведете базовия URL адрес за търсене (напр. https://myhealth.bg/search/?page=): ").strip()
             while not BASE_SEARCH_URL:
                 BASE_SEARCH_URL = input("URL адресът не може да бъде празен. Моля, въведете отново: ").strip()
         else:
-            # 3. В случай на пайпнати данни (echo "url" | python script.py) четем директно от stdin
             piped_input = sys.stdin.read().strip()
             BASE_SEARCH_URL = piped_input if piped_input else "https://myhealth.bg/search/?page="
 
