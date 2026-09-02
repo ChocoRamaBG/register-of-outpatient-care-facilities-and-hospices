@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-09-02T08:06:31.199863",
-  "elapsed_seconds": 19200,
-  "query_idx": 38782,
-  "query": "ДД2",
+  "timestamp": "2026-09-02T13:28:54.004736",
+  "elapsed_seconds": 19230,
+  "query_idx": 39918,
+  "query": "ЗХ8",
   "page_num": 0,
-  "status": "goto",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%94%D0%942&selectedSearchFilter=1",
-  "total_uics": 563956,
+  "status": "generic_error",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%97%D0%A58&selectedSearchFilter=1",
+  "total_uics": 564011,
   "last_new_uics": 1
 }
