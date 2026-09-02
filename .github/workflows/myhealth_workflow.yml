@@ -1,49 +1,43 @@
-name: Run MyHealth Scraper
+name: MyHealth Scraper
 
 on:
   workflow_dispatch:
-    inputs:
-      target_url:
-        description: 'Target URL to scrape'
-        required: true
-        default: 'https://myhealth.bg/search/?page=164'
-  schedule:
-    - cron: '0 2 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: myhealth-scraper
+  cancel-in-progress: false
 
 jobs:
-  scrape-data:
+  scrape:
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 350
+
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
-          cache: 'pip'
+          python-version: "3.11"
+          cache: pip
 
-      - name: Install Dependencies
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install webdriver-manager pandas selenium openpyxl
+          python -m pip install selenium pandas openpyxl
 
-      - name: Run Scraper
-        env:
-          CI: true
-          TARGET_URL: ${{ github.event.inputs.target_url || 'https://myhealth.bg/search/?page=164' }}
-        run: |
-          cd myhealth_scraper
-          python scraper_myhealth.py
+      - name: Run scraper
+        run: python myhealth_scraper/scraper_myhealth.py
 
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
+      - name: Upload Excel output
         if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: myhealth-run-results
-          path: |
-            myhealth_scraper/myhealth_data.xlsx
-            myhealth_scraper/debug_screenshot.png
-          if-no-files-found: ignore
-          retention-days: 7
+          name: myhealth-headless-output
+          path: myhealth_scraper/myhealth_headless.xlsx
+          if-no-files-found: warn
+          retention-days: 14
