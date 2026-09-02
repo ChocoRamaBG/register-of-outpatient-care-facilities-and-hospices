@@ -25,10 +25,15 @@ jobs:
           python-version: "3.11"
           cache: pip
 
+      # Добавяме изрична инсталация на Chrome, за да не гърми undetected-chromedriver
+      - name: Setup Chrome
+        uses: browser-actions/setup-chrome@v1
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install selenium pandas openpyxl
+          # Тук добавихме undetected-chromedriver
+          python -m pip install selenium pandas openpyxl undetected-chromedriver
 
       - name: Run scraper
         run: python myhealth_scraper/scraper_myhealth.py
