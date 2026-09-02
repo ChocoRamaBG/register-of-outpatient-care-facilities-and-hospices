@@ -1,5 +1,3 @@
-"""Scrape doctor profiles from myhealth.bg and persist results to Excel."""
-
 import time
 import os
 import re
@@ -10,10 +8,23 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
+# Гарантирано запазване в правилната директория
+try:
+    output_dir = os.path.dirname(os.path.abspath(__file__))
+except NameError:
+    output_dir = os.getcwd()
 
-output_dir = os.path.dirname(os.path.abspath(__file__))
 os.makedirs(output_dir, exist_ok=True)
 output_filename = os.path.join(output_dir, "myhealth_headless.xlsx")
+
+# Предварително създаване на файла, за да не гърми GitHub Actions Artifact Upload
+# в случай, че страницата няма данни за скрапване.
+if not os.path.exists(output_filename):
+    empty_df = pd.DataFrame(columns=[
+        "Име", "Специалност", "Рейтинг_Инфо", "Първи свободен час (Общо)", 
+        "Телефони", "НЗОК", "Биография", "URL", "Timestamp", "Цени", "Застрахователи"
+    ])
+    empty_df.to_excel(output_filename, index=False)
 
 options = webdriver.ChromeOptions()
 options.add_argument('--headless=new')
@@ -26,7 +37,6 @@ options.add_argument('--disable-dev-shm-usage')
 
 driver = webdriver.Chrome(options=options)
 
-
 def get_text_safe(xpath, search_context=None, default="-"):
     try:
         ctx = search_context if search_context else driver
@@ -35,11 +45,7 @@ def get_text_safe(xpath, search_context=None, default="-"):
     except:
         return default
 
-
 def scrape_insurances_myhealth():
-    """
-    Дърпа застрахователите от логата в секцията .practice__insurance-logos
-    """
     try:
         logos = driver.find_elements(By.XPATH, "//div[contains(@class, 'practice__insurance-logos')]//img")
         insurances = [img.get_attribute("alt").strip() for img in logos if img.get_attribute("alt")]
@@ -48,9 +54,6 @@ def scrape_insurances_myhealth():
         return "-"
 
 def scrape_prices_myhealth():
-    """
-    Дърпа цените от .practice__pricing-text
-    """
     try:
         price_items = driver.find_elements(By.XPATH, "//div[contains(@class, 'practice__pricing-text--item')]")
         found_prices = []
@@ -66,16 +69,10 @@ def scrape_prices_myhealth():
         return "-"
 
 def get_coordinates_from_map_link(context=None):
-    """
-    Извлича daddr (destination address) координатите от линка към Google Maps.
-    Може да работи глобално или в специфичен контекст (болница).
-    Target format: daddr=42.683379,23.304412
-    """
     try:
         ctx = context if context else driver
         map_link = ctx.find_element(By.XPATH, ".//a[contains(@href, 'google.com/maps') and contains(@href, 'daddr')]")
         href = map_link.get_attribute("href")
-        
         match = re.search(r"daddr=([\d\.]+),([\d\.]+)", href)
         if match:
             return f"{match.group(1)}, {match.group(2)}"
@@ -84,9 +81,6 @@ def get_coordinates_from_map_link(context=None):
         return "-"
 
 def get_full_biography():
-    """
-    Опитва се да вземе пълната биография.
-    """
     try:
         hidden_bio_el = driver.find_elements(By.ID, "hidden-profile-resume")
         if hidden_bio_el:
@@ -108,12 +102,7 @@ def get_full_biography():
         return "-"
 
 def scrape_practices_detailed():
-    """
-    Връща списък с речници за всяка практика:
-    [{'Hospital': '...', 'Address': '...', 'First_Date': '...', 'Coords': '...'}, ...]
-    """
     practices_data = []
-    
     try:
         free_dates_map = {}
         try:
@@ -138,15 +127,11 @@ def scrape_practices_detailed():
         for wp in workplaces:
             try:
                 h_name = wp.find_element(By.CLASS_NAME, "doctor-details__workplace-item-title").text.strip()
-                
                 h_addr = wp.find_element(By.CLASS_NAME, "doctor-details__workplace-item-address").text.strip()
-                
                 h_coords = get_coordinates_from_map_link(wp)
-                
                 h_date = "Няма свободни часове"
                 
                 check_str_full = re.sub(r'\s+', '', (h_name + h_addr).lower())
-                
                 check_str_addr = re.sub(r'\s+', '', h_addr.lower())
                 
                 for k, v in free_dates_map.items():
@@ -163,7 +148,7 @@ def scrape_practices_detailed():
                     "First_Date": h_date,
                     "Coords": h_coords
                 })
-            except Exception as e:
+            except Exception:
                 continue
 
     except Exception as e:
@@ -172,12 +157,7 @@ def scrape_practices_detailed():
     return practices_data
 
 def get_all_first_available_dates_summary():
-    """
-    Взима ВСИЧКИ свободни дати, намерени в "бързия преглед", и ги обединява в стринг.
-    Това е fallback, ако не успеем да ги мапнем правилно по болници.
-    """
     dates_found = []
-    
     try:
         date_elements = driver.find_elements(By.CLASS_NAME, "dummy--detailed-profile-card__practices-fa")
         for date_el in date_elements:
@@ -208,13 +188,9 @@ def scrape_doctor_profile_myhealth(url):
         WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.CLASS_NAME, "doctor-header")))
         time.sleep(1.0)
         
-        
         doc_name = get_text_safe("//div[contains(@class, 'doctor-header')]//h2/a")
-        
         specialty = get_text_safe("//div[contains(@class, 'doctor-speciality')]")
-        
         rating_text = get_text_safe("//span[contains(@class, 'doctor-rating-score_count')]")
-        
         bio = get_full_biography()
 
         nzok = "Не"
@@ -280,7 +256,6 @@ def save_to_excel(data):
         cols = ["Име", "Специалност", "Рейтинг_Инфо", "Първи свободен час (Общо)", "Телефони", "НЗОК", "Биография", "URL", "Timestamp", "Цени", "Застрахователи"]
         remaining_cols = [c for c in df.columns if c not in cols]
         remaining_cols.sort()
-        
         final_cols = cols + remaining_cols
         
         df = df.reindex(columns=final_cols)
@@ -306,36 +281,40 @@ try:
         driver.get(target_url)
         
         try:
-            WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.TAG_NAME, "a")))
-            
+            # Изчакваме специфично да се зареди поне един лекарски профил (или практиките).
+            # Ако след 10 секунди не се появи такъв линк, значи страницата е празна.
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.XPATH, "//a[contains(@href, '/lekar/') and not(contains(@href, 'search'))]"))
+            )
             all_links = driver.find_elements(By.TAG_NAME, "a")
+        except Exception:
+            # Ако изтече времето, отиваме директно на проверка и спираме изпълнението.
+            all_links = []
             
-            doctor_urls = []
-            for link in all_links:
-                href = link.get_attribute("href")
-                if href and ("/lekar/" in href or "/practices/lekar/" in href) and "search" not in href:
-                    doctor_urls.append(href)
-            
-            doctor_urls = list(set(doctor_urls))
-            
-            if not doctor_urls:
-                print("No doctor profile links found. Stopping.")
-                break
-            
-            print(f"Found {len(doctor_urls)} doctor profile(s).")
-            
-            for u in doctor_urls:
-                print(f"Scraping: {u}")
-                res = scrape_doctor_profile_myhealth(u)
-                if res:
-                    save_to_excel([res])
-            
-            
-            page += 1
-            
-        except Exception as e:
-            print(f"Page loop error: {e}")
+        doctor_urls = []
+        for link in all_links:
+            href = link.get_attribute("href")
+            if href and ("/lekar/" in href or "/practices/lekar/" in href) and "search" not in href:
+                doctor_urls.append(href)
+        
+        doctor_urls = list(set(doctor_urls))
+        
+        if not doctor_urls:
+            print("No doctor profile links found. Stopping.")
             break
+        
+        print(f"Found {len(doctor_urls)} doctor profile(s).")
+        
+        for u in doctor_urls:
+            print(f"Scraping: {u}")
+            res = scrape_doctor_profile_myhealth(u)
+            if res:
+                save_to_excel([res])
+        
+        page += 1
+        
+except Exception as e:
+    print(f"Page loop error: {e}")
 
 finally:
     try:
@@ -344,4 +323,3 @@ finally:
     except:
         pass
     print(f"Finished. Output file: {output_filename}")
-    
