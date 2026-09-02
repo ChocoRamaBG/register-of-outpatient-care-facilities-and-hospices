@@ -1,101 +1,39 @@
-name: "(myhealth.bg) Autonomous Registry Scraper"
+name: Run MyHealth Scraper
 
 on:
-  workflow_dispatch:
-    inputs:
-      start_page:
-        description: "Starting page when no savegame exists"
-        required: false
-        default: "1"
-      base_url:
-        description: "Base search URL"
-        required: false
-        default: "https://myhealth.bg/search/?page="
-
+  workflow_dispatch: # Allows manual trigger from the GitHub Actions UI
   schedule:
-    - cron: "0 4 * * *"
-
-concurrency:
-  group: myhealth-scraper
-  cancel-in-progress: false
-
-permissions:
-  contents: write
-  actions: write
+    - cron: '0 2 * * *' # Optional: Runs every day at 02:00 UTC (uncomment if daily sync is needed)
 
 jobs:
-  run-pipeline:
+  scrape-data:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
-    defaults:
-      run:
-        working-directory: ./myhealth_scraper
-    env:
-      PYTHONUNBUFFERED: "1"
-      START_PAGE: ${{ github.event.inputs.start_page || '1' }}
-      BASE_SEARCH_URL: ${{ github.event.inputs.base_url || 'https://myhealth.bg/search/?page=' }}
-      TIME_LIMIT_SECONDS: "19440"
+    
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
-          cache: "pip"
+          python-version: '3.10'
+          cache: 'pip'
 
-      - name: Install dependencies
+      - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install --upgrade selenium webdriver-manager pandas openpyxl
-          sudo apt-get update
-          sudo apt-get install -y xvfb
+          pip install webdriver-manager pandas selenium openpyxl
 
-      - name: Verify environment
-        run: |
-          python --version
-          google-chrome --version || true
-          python -m py_compile scraper_myhealth.py
-
-      - name: Execute autonomous scraper
-        run: xvfb-run -a python scraper_myhealth.py
-
-      - name: Commit progress and extracted data
-        run: |
-          set -e
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          mkdir -p myhealth_outputs
-          touch myhealth_outputs/parsed_urls_myhealth.txt
-
-          # Стъпка за избягване на конфликти при git pull --rebase
-          git add myhealth_outputs/
-
-          if git diff --cached --quiet; then
-            echo "No new changes to commit."
-          else
-            git commit -m "Auto-save state: update myhealth.bg scraper data"
-            git pull --rebase --autostash origin main
-            git push origin HEAD:main
-          fi
-
-      - name: Check continuation flag
-        id: continuation
-        run: |
-          if [ -f "myhealth_outputs/CONTINUE_FLAG_MYHEALTH" ]; then
-            echo "continue=true" >> "$GITHUB_OUTPUT"
-            echo "Continue flag detected."
-          else
-            echo "continue=false" >> "$GITHUB_OUTPUT"
-            echo "No continue flag detected."
-          fi
-
-      - name: Trigger next run
-        if: steps.continuation.outputs.continue == 'true'
+      - name: Run Scraper
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CI: true # This triggers the headless configuration in the script
         run: |
-          gh workflow run "(myhealth.bg) Autonomous Registry Scraper" --ref main
+          cd myhealth_scraper
+          python scraper_myhealth.py
+
+      - name: Upload Scraped Data
+        uses: actions/upload-artifact@v4
+        with:
+          name: myhealth-scraped-data
+          path: myhealth_scraper/myhealth_data.xlsx
+          retention-days: 7
