@@ -1,6 +1,7 @@
 import time
 import os
 import re
+import urllib.parse
 import pandas as pd
 from datetime import datetime
 from selenium import webdriver
@@ -10,7 +11,6 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 
-# Determine output directory dynamically
 try:
     output_dir = os.path.dirname(os.path.abspath(__file__))
 except NameError:
@@ -26,17 +26,16 @@ if not os.path.exists(output_dir):
 output_filename = os.path.join(output_dir, "myhealth_data.xlsx")
 print(f"Target output file: {output_filename}")
 
-# Configure Chrome options
 options = webdriver.ChromeOptions()
 options.add_argument('--start-maximized')
 options.add_argument('--disable-blink-features=AutomationControlled')
 options.add_argument('--log-level=3')
 
-# Run headless if executing in a CI/CD environment (e.g., GitHub Actions)
 if os.environ.get('CI') == 'true':
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--window-size=1920,1080')
 
 print("Initializing Chrome WebDriver...")
 try:
@@ -289,14 +288,31 @@ def save_to_excel(data):
     except Exception as e:
         print(f"Error saving to Excel: {e}")
 
-# --- MAIN EXECUTION ---
 if __name__ == "__main__":
-    start_page = 164
-    current_page = start_page
+    if os.environ.get('CI') == 'true':
+        input_url = os.environ.get('TARGET_URL', 'https://myhealth.bg/search/?page=1')
+    else:
+        input_url = input("Enter target URL to begin scraping (e.g., https://myhealth.bg/search/?page=1): ").strip()
+        if not input_url:
+            input_url = 'https://myhealth.bg/search/?page=1'
+
+    parsed_url = urllib.parse.urlparse(input_url)
+    qs = urllib.parse.parse_qs(parsed_url.query)
+    current_page = int(qs.get('page', ['1'])[0])
 
     try:
         while True:
-            target_url = f"https://myhealth.bg/search/?page={current_page}"
+            qs['page'] = [str(current_page)]
+            new_query = urllib.parse.urlencode(qs, doseq=True)
+            target_url = urllib.parse.urlunparse((
+                parsed_url.scheme, 
+                parsed_url.netloc, 
+                parsed_url.path, 
+                parsed_url.params, 
+                new_query, 
+                parsed_url.fragment
+            ))
+            
             print(f"\nProcessing page {current_page}: {target_url}")
             driver.get(target_url)
             
@@ -314,6 +330,9 @@ if __name__ == "__main__":
                 
                 if not doctor_urls:
                     print("No more doctor profiles found. Terminating pagination.")
+                    debug_img_path = os.path.join(output_dir, "debug_screenshot.png")
+                    driver.save_screenshot(debug_img_path)
+                    print(f"Debug screenshot saved to: {debug_img_path}")
                     break
                 
                 print(f"Found {len(doctor_urls)} profiles on page {current_page}.")
@@ -329,6 +348,9 @@ if __name__ == "__main__":
                 
             except Exception as e:
                 print(f"Error during pagination loop on page {current_page}: {e}")
+                debug_img_path = os.path.join(output_dir, "debug_screenshot.png")
+                driver.save_screenshot(debug_img_path)
+                print(f"Debug screenshot saved to: {debug_img_path}")
                 break
 
     finally:
@@ -337,4 +359,4 @@ if __name__ == "__main__":
             print("WebDriver terminated successfully.")
         except:
             pass
-        print(f"\nExecution complete. Output saved to: {output_filename}")
+        print(f"\nExecution complete. Output directory: {output_dir}")
