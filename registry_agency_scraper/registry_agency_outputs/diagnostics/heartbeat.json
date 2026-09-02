@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-09-02T02:44:21.129781",
+  "timestamp": "2026-09-02T08:06:31.199863",
   "elapsed_seconds": 19200,
-  "query_idx": 37336,
-  "query": "ЯЬД",
+  "query_idx": 38782,
+  "query": "ДД2",
   "page_num": 0,
   "status": "goto",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%AF%D0%AC%D0%94&selectedSearchFilter=1",
-  "total_uics": 563866,
-  "last_new_uics": 0
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%94%D0%942&selectedSearchFilter=1",
+  "total_uics": 563956,
+  "last_new_uics": 1
 }
