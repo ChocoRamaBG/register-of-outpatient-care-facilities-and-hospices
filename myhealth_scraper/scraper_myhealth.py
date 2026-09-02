@@ -3,10 +3,10 @@ import os
 import re
 import pandas as pd
 from datetime import datetime
-from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+import undetected_chromedriver as uc
 
 try:
     output_dir = os.path.dirname(os.path.abspath(__file__))
@@ -23,7 +23,7 @@ if not os.path.exists(output_filename):
     ])
     empty_df.to_excel(output_filename, index=False)
 
-options = webdriver.ChromeOptions()
+options = uc.ChromeOptions()
 options.add_argument('--headless=new')
 options.add_argument('--disable-blink-features=AutomationControlled')
 options.add_argument('--log-level=3')
@@ -32,7 +32,8 @@ options.add_argument('--disable-gpu')
 options.add_argument('--no-sandbox')
 options.add_argument('--disable-dev-shm-usage')
 
-driver = webdriver.Chrome(options=options)
+# Използваме undetected_chromedriver вместо стандартния
+driver = uc.Chrome(options=options)
 
 def get_text_safe(xpath, search_context=None, default="-"):
     try:
@@ -290,6 +291,8 @@ try:
             )
             all_links = driver.find_elements(By.TAG_NAME, "a")
         except Exception:
+            # Дебъг принт, за да видим дали Cloudflare ни блокира
+            print(f"Timeout on page {page}. Current page title is: {driver.title}")
             all_links = []
             
         doctor_urls = []
