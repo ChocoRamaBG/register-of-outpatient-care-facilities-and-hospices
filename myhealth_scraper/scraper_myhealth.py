@@ -7,8 +7,9 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 
-# Гарантирано запазване в правилната директория
 try:
     output_dir = os.path.dirname(os.path.abspath(__file__))
 except NameError:
@@ -17,8 +18,6 @@ except NameError:
 os.makedirs(output_dir, exist_ok=True)
 output_filename = os.path.join(output_dir, "myhealth_headless.xlsx")
 
-# Предварително създаване на файла, за да не гърми GitHub Actions Artifact Upload
-# в случай, че страницата няма данни за скрапване.
 if not os.path.exists(output_filename):
     empty_df = pd.DataFrame(columns=[
         "Име", "Специалност", "Рейтинг_Инфо", "Първи свободен час (Общо)", 
@@ -35,7 +34,11 @@ options.add_argument('--disable-gpu')
 options.add_argument('--no-sandbox')
 options.add_argument('--disable-dev-shm-usage')
 
-driver = webdriver.Chrome(options=options)
+try:
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=options)
+except Exception as e:
+    driver = webdriver.Chrome(options=options)
 
 def get_text_safe(xpath, search_context=None, default="-"):
     try:
@@ -168,7 +171,8 @@ def get_all_first_available_dates_summary():
             else:
                 txt = date_el.text.strip()
                 if txt: dates_found.append(txt)
-    except: pass
+    except:
+        pass
 
     if not dates_found:
         try:
@@ -178,7 +182,8 @@ def get_all_first_available_dates_summary():
                 if raw_date:
                     clean_date = raw_date.replace("T", " ").split("+")[0]
                     dates_found.append(clean_date)
-        except: pass
+        except:
+            pass
         
     return " | ".join(dates_found) if dates_found else "Няма свободни часове"
 
@@ -197,13 +202,16 @@ def scrape_doctor_profile_myhealth(url):
         try:
             if driver.find_elements(By.XPATH, "//span[contains(@class, 'ww-nzok')]"):
                 nzok = "Да"
-        except: pass
+        except:
+            pass
 
         phones = []
         try:
             phone_links = driver.find_elements(By.XPATH, "//a[contains(@href, 'tel:')]")
             phones = [lnk.get_attribute("href").replace("tel:", "") for lnk in phone_links]
-        except: pass
+        except:
+            pass
+        
         phone_str = ", ".join(list(set(phones))) if phones else "-"
 
         doc_info = {
@@ -227,7 +235,8 @@ def scrape_doctor_profile_myhealth(url):
 
         for i, p in enumerate(practices):
             idx = i + 1
-            if idx > 5: break
+            if idx > 5:
+                break
             doc_info[f"Hospital_{idx}"] = p["Hospital"]
             doc_info[f"Address_{idx}"] = p["Address"]
             doc_info[f"First_Free_{idx}"] = p["First_Date"]
@@ -240,7 +249,7 @@ def scrape_doctor_profile_myhealth(url):
              doc_info[f"Coords_{i}"] = "-"
 
         if doc_name == "-" or not doc_name:
-            print(f"WARNING: Doctor name not found for {url}")
+            print(f"Warning: Doctor name not found for {url}")
 
         return doc_info
 
@@ -249,46 +258,44 @@ def scrape_doctor_profile_myhealth(url):
         return None
 
 def save_to_excel(data):
-    if not data: return
+    if not data:
+        return
     try:
         df = pd.DataFrame(data)
         
         cols = ["Име", "Специалност", "Рейтинг_Инфо", "Първи свободен час (Общо)", "Телефони", "НЗОК", "Биография", "URL", "Timestamp", "Цени", "Застрахователи"]
         remaining_cols = [c for c in df.columns if c not in cols]
         remaining_cols.sort()
-        final_cols = cols + remaining_cols
         
+        final_cols = cols + remaining_cols
         df = df.reindex(columns=final_cols)
 
         if os.path.exists(output_filename):
             try:
                 existing_df = pd.read_excel(output_filename)
                 df = pd.concat([existing_df, df], ignore_index=True)
-            except: pass
+            except:
+                pass
             
         df.to_excel(output_filename, index=False)
         print(f"Saved {len(data)} record(s) to {output_filename}")
     except Exception as e:
         print(f"Excel write error: {e}")
 
-
 page = 164
 
 try:
     while True:
         target_url = f"https://myhealth.bg/search/?page={page}"
-        print(f"\n🚀 Отиваме на страница {page}: {target_url}")
+        print(f"Processing page {page}: {target_url}")
         driver.get(target_url)
         
         try:
-            # Изчакваме специфично да се зареди поне един лекарски профил (или практиките).
-            # Ако след 10 секунди не се появи такъв линк, значи страницата е празна.
             WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located((By.XPATH, "//a[contains(@href, '/lekar/') and not(contains(@href, 'search'))]"))
             )
             all_links = driver.find_elements(By.TAG_NAME, "a")
         except Exception:
-            # Ако изтече времето, отиваме директно на проверка и спираме изпълнението.
             all_links = []
             
         doctor_urls = []
@@ -300,13 +307,12 @@ try:
         doctor_urls = list(set(doctor_urls))
         
         if not doctor_urls:
-            print("No doctor profile links found. Stopping.")
+            print("No doctor profile links found. Stopping pagination.")
             break
         
         print(f"Found {len(doctor_urls)} doctor profile(s).")
         
         for u in doctor_urls:
-            print(f"Scraping: {u}")
             res = scrape_doctor_profile_myhealth(u)
             if res:
                 save_to_excel([res])
@@ -314,12 +320,11 @@ try:
         page += 1
         
 except Exception as e:
-    print(f"Page loop error: {e}")
+    print(f"Execution error during pagination: {e}")
 
 finally:
     try:
         driver.quit()
-        print("Chrome WebDriver stopped.")
     except:
         pass
-    print(f"Finished. Output file: {output_filename}")
+    print(f"Process finished. Output saved to: {output_filename}")
