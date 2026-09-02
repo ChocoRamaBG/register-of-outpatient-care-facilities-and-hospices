@@ -15,6 +15,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 
+# --- КОНСТАНТИ И НАСТРОЙКИ ---
 START_TIME = time.time()
 TIME_LIMIT_SECONDS = float(os.getenv('TIME_LIMIT_SECONDS', str(5.4 * 60 * 60)))
 DEFAULT_START_PAGE = int(os.getenv('START_PAGE', '1'))
@@ -22,9 +23,9 @@ MAX_PAGE_RETRIES = 5
 MAX_PROFILE_RETRIES = 3
 PAGE_WAIT_SECONDS = 45
 PROFILE_WAIT_SECONDS = 15
-
 BASE_SEARCH_URL = ""
 
+# --- 📁 ПЪТ КЪМ ФАЙЛОВЕТЕ ---
 try:
     SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 except NameError:
@@ -37,6 +38,7 @@ MEMORY_FILE = os.path.join(OUTPUT_DIR, 'parsed_urls_myhealth.txt')
 CSV_FILE = os.path.join(OUTPUT_DIR, 'myhealth_doctors_full.csv')
 CONTINUE_FLAG_FILE = os.path.join(OUTPUT_DIR, 'CONTINUE_FLAG_MYHEALTH')
 
+# --- КОЛОНИ ЗА CSV ---
 FIELDNAMES = [
     'Име', 'Специалност', 'Рейтинг_Инфо', 'Първи свободен час (Общо)',
     'Телефони', 'НЗОК', 'Биография', 'URL', 'Timestamp', 'Цени', 'Застрахователи'
@@ -49,6 +51,7 @@ parsed_urls = set()
 driver = None
 
 
+# --- УПРАВЛЕНИЕ НА СЪСТОЯНИЕТО (STATE MANAGEMENT) ---
 def save_state():
     tmp = STATE_FILE + '.tmp'
     try:
@@ -58,7 +61,6 @@ def save_state():
         os.replace(tmp, STATE_FILE)
     except Exception as e:
         print(f'[WARN] Could not save state: {e}')
-
 
 def load_state():
     if not os.path.exists(STATE_FILE):
@@ -72,7 +74,6 @@ def load_state():
         print(f"[INFO] Resuming from page {state['page']}.")
     except Exception as e:
         print(f'[WARN] Could not load state: {e}')
-
 
 def load_memory():
     if not os.path.exists(MEMORY_FILE):
@@ -89,21 +90,6 @@ def load_memory():
     except Exception as e:
         print(f'[WARN] Could not load URL memory: {e}')
 
-
-def canonicalize_url(url):
-    if not url:
-        return ''
-    url = url.strip()
-    if url.startswith('/'):
-        url = urljoin('https://myhealth.bg', url)
-    return urlparse(url)._replace(fragment='').geturl().rstrip('/')
-
-
-def is_parsed(url):
-    u = canonicalize_url(url)
-    return u in parsed_urls or unquote(u) in parsed_urls
-
-
 def mark_as_parsed(url):
     u = canonicalize_url(url)
     if not u:
@@ -113,17 +99,26 @@ def mark_as_parsed(url):
     with open(MEMORY_FILE, 'a', encoding='utf-8') as f:
         f.write(u + '\n')
 
+def is_parsed(url):
+    u = canonicalize_url(url)
+    return u in parsed_urls or unquote(u) in parsed_urls
+
+def canonicalize_url(url):
+    if not url: return ''
+    url = url.strip()
+    if url.startswith('/'):
+        url = urljoin('https://myhealth.bg', url)
+    return urlparse(url)._replace(fragment='').geturl().rstrip('/')
 
 def time_limit_reached():
     return time.time() - START_TIME >= TIME_LIMIT_SECONDS
 
-
+# --- CSV ЕКСПОРТ ---
 def init_csv():
     if os.path.exists(CSV_FILE) and os.path.getsize(CSV_FILE) > 0:
         return
     with open(CSV_FILE, 'w', encoding='utf-8-sig', newline='') as f:
         csv.DictWriter(f, fieldnames=FIELDNAMES, extrasaction='ignore').writeheader()
-
 
 def append_csv(row):
     with open(CSV_FILE, 'a', encoding='utf-8-sig', newline='') as f:
@@ -132,14 +127,12 @@ def append_csv(row):
         os.fsync(f.fileno())
 
 
+# --- УПРАВЛЕНИЕ НА БРАУЗЪРА ---
 def init_driver():
     global driver
     options = webdriver.ChromeOptions()
     
-    # Стратегия 'eager': връща контрол веднага щом DOM дървото се зареди.
-    options.page_load_strategy = 'eager'
-    
-    # Задължителни флагове за стабилност в GitHub Actions
+    # Задължителни настройки за стабилност в Linux / GitHub Actions
     options.add_argument('--headless=new')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
@@ -153,12 +146,11 @@ def init_driver():
     try:
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=options)
-        driver.set_page_load_timeout(30)
+        driver.set_page_load_timeout(45)
         print('[INFO] Chrome driver started successfully.')
     except Exception as e:
         print(f'[ERROR] Failed to start Chrome driver: {e}')
         raise e
-
 
 def restart_driver():
     global driver
@@ -172,7 +164,6 @@ def restart_driver():
     time.sleep(3)
     init_driver()
 
-
 def close_driver():
     global driver
     try:
@@ -182,19 +173,16 @@ def close_driver():
         pass
     driver = None
 
-
 def body_text():
     try:
         return driver.find_element(By.TAG_NAME, 'body').text.lower()
     except Exception:
         return ''
 
-
 def blocked_page():
     text = body_text()
     markers = ('too many requests', 'access denied', 'cloudflare', 'just a moment', 'temporarily unavailable')
     return any(m in text for m in markers)
-
 
 def get_text_safe(xpath, context=None, default='-'):
     try:
@@ -204,6 +192,7 @@ def get_text_safe(xpath, context=None, default='-'):
         return default
 
 
+# --- SCRAPE ФУНКЦИИ ---
 def scrape_insurances_myhealth():
     try:
         imgs = driver.find_elements(By.XPATH, "//div[contains(@class, 'practice__insurance-logos')]//img")
@@ -215,7 +204,6 @@ def scrape_insurances_myhealth():
         return ', '.join(vals) if vals else '-'
     except Exception:
         return '-'
-
 
 def scrape_prices_myhealth():
     try:
@@ -232,7 +220,6 @@ def scrape_prices_myhealth():
     except Exception:
         return '-'
 
-
 def get_coordinates_from_map_link(context=None):
     try:
         ctx = context or driver
@@ -245,7 +232,6 @@ def get_coordinates_from_map_link(context=None):
         return '-'
     except Exception:
         return '-'
-
 
 def get_full_biography():
     try:
@@ -265,7 +251,6 @@ def get_full_biography():
     except Exception:
         return '-'
 
-
 def scrape_practices_detailed():
     results = []
     dates_map = {}
@@ -276,7 +261,6 @@ def scrape_practices_detailed():
             dates = box.find_elements(By.CLASS_NAME, 'dummy--detailed-profile-card__practices-fa')
             if len(titles) == len(dates):
                 for title, date_el in zip(titles, dates):
-                    # Премахване на интервали и пунктуация
                     key = re.sub(r'[\s,"\'\-\.]', '', title.text.strip().lower())
                     raw = date_el.get_attribute('data-date')
                     value = raw.replace('T', ' ').split('+')[0] if raw else date_el.text.strip()
@@ -291,7 +275,6 @@ def scrape_practices_detailed():
                 name = wp.find_element(By.CLASS_NAME, 'doctor-details__workplace-item-title').text.strip()
                 address = wp.find_element(By.CLASS_NAME, 'doctor-details__workplace-item-address').text.strip()
                 
-                # Премахване на интервали и пунктуация и тук
                 full = re.sub(r'[\s,"\'\-\.]', '', (name + address).lower())
                 addr = re.sub(r'[\s,"\'\-\.]', '', address.lower())
                 first = 'Няма свободни часове'
@@ -310,7 +293,6 @@ def scrape_practices_detailed():
     except Exception:
         pass
     return results
-
 
 def get_all_first_available_dates_summary():
     found = []
@@ -332,7 +314,6 @@ def get_all_first_available_dates_summary():
             pass
     return ' | '.join(dict.fromkeys(found)) if found else 'Няма свободни часове'
 
-
 def extract_doctor_urls():
     urls = []
     try:
@@ -351,7 +332,6 @@ def extract_doctor_urls():
         pass
     return list(dict.fromkeys(urls))
 
-
 def wait_for_doctor_urls():
     end = time.time() + PAGE_WAIT_SECONDS
     while time.time() < end:
@@ -363,7 +343,7 @@ def wait_for_doctor_urls():
         time.sleep(1)
     return []
 
-
+# --- ГЛАВНИ СТЪПКИ В ПАЙПЛАЙНА ---
 def load_search_page(page_number):
     url = f'{BASE_SEARCH_URL}{page_number}'
     for attempt in range(1, MAX_PAGE_RETRIES + 1):
@@ -371,7 +351,10 @@ def load_search_page(page_number):
             return None
         print(f'\n[PAGE {page_number}] Attempt {attempt}/{MAX_PAGE_RETRIES}: {url}')
         try:
+            # Изчистване на паметта преди навигация
+            driver.get("about:blank")
             driver.get(url)
+            
             urls = wait_for_doctor_urls()
             if urls:
                 print(f'[INFO] Page {page_number}: found {len(urls)} doctor profile URLs.')
@@ -379,18 +362,23 @@ def load_search_page(page_number):
             print('[WARN] Page loaded but no doctor URLs were found.')
         except Exception as e:
             print(f'[WARN] Search page attempt failed: {e}')
+            
         if attempt < MAX_PAGE_RETRIES:
             restart_driver()
             time.sleep(2 * attempt)
     return None
 
-
 def scrape_doctor_profile_myhealth(url):
     for attempt in range(1, MAX_PROFILE_RETRIES + 1):
         if time_limit_reached():
             return None
+            
         try:
             print(f'    [PROFILE {attempt}/{MAX_PROFILE_RETRIES}] {url}')
+            
+            # Отваряне на профила в изолиран нов таб
+            driver.execute_script("window.open('about:blank');")
+            driver.switch_to.window(driver.window_handles[-1])
             
             driver.get(url)
             
@@ -438,17 +426,29 @@ def scrape_doctor_profile_myhealth(url):
                 row[f'Coords_{i}'] = p['Coords'] if p else '-'
                 
             return row
+            
         except Exception as e:
             print(f'    [WARN] Profile attempt failed: {e}')
-            if attempt < MAX_PROFILE_RETRIES:
-                restart_driver()
+        finally:
+            # Унищожаване на таба след извличане на данните или при грешка
+            if driver:
+                try:
+                    while len(driver.window_handles) > 1:
+                        driver.switch_to.window(driver.window_handles[-1])
+                        driver.close()
+                    driver.switch_to.window(driver.window_handles[0])
+                except Exception:
+                    pass
+                    
+        # Ако стигнем до тук, значи е имало грешка. Рестартираме браузъра преди следващия опит.
+        if attempt < MAX_PROFILE_RETRIES:
+            restart_driver()
+            
     return None
-
 
 def flag_for_continuation():
     with open(CONTINUE_FLAG_FILE, 'w', encoding='utf-8') as f:
         f.write('CONTINUE\n')
-
 
 def clear_continuation_flag():
     try:
@@ -461,6 +461,7 @@ def clear_continuation_flag():
 def main():
     global BASE_SEARCH_URL
     
+    # Интелигентно прочитане на входните данни
     env_url = os.getenv('BASE_SEARCH_URL', '').strip()
     if env_url:
         BASE_SEARCH_URL = env_url
@@ -482,20 +483,27 @@ def main():
     try:
         while True:
             if time_limit_reached():
-                save_state(); flag_for_continuation(); break
+                save_state()
+                flag_for_continuation()
+                break
+                
             page = int(state['page'])
             urls = load_search_page(page)
             
             if urls is None:
                 state['consecutive_fails'] = int(state.get('consecutive_fails', 0)) + 1
-                save_state(); flag_for_continuation()
+                save_state()
+                flag_for_continuation()
                 print(f'[ERROR] Could not load page {page}. Keeping state on same page.')
                 break
             
             state['consecutive_fails'] = 0
             for n, url in enumerate(urls, 1):
                 if time_limit_reached():
-                    save_state(); flag_for_continuation(); return
+                    save_state()
+                    flag_for_continuation()
+                    return
+                    
                 if is_parsed(url):
                     print(f'  [{n}/{len(urls)}] [SKIP] Already parsed: {url}')
                     continue
