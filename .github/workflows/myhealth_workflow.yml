@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       target_url:
-        description: 'Target URL to scrape (default starts at page 1)'
+        description: 'Target URL to scrape'
         required: true
-        default: 'https://myhealth.bg/search/?page=1'
+        default: 'https://myhealth.bg/search/?page=164'
   schedule:
     - cron: '0 2 * * *'
 
@@ -32,7 +32,7 @@ jobs:
       - name: Run Scraper
         env:
           CI: true
-          TARGET_URL: ${{ github.event.inputs.target_url || 'https://myhealth.bg/search/?page=1' }}
+          TARGET_URL: ${{ github.event.inputs.target_url || 'https://myhealth.bg/search/?page=164' }}
         run: |
           cd myhealth_scraper
           python scraper_myhealth.py
