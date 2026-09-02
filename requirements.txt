@@ -4,3 +4,4 @@ openpyxl
 selenium
 playwright
 webdriver-manager
+undetected-chromedriver
