@@ -2,6 +2,7 @@ import csv
 import json
 import os
 import re
+import sys
 import time
 from datetime import datetime
 from urllib.parse import unquote, urljoin, urlparse
@@ -40,7 +41,8 @@ FIELDNAMES = [
     'Име', 'Специалност', 'Рейтинг_Инфо', 'Първи свободен час (Общо)',
     'Телефони', 'НЗОК', 'Биография', 'URL', 'Timestamp', 'Цени', 'Застрахователи'
 ]
-for i in range(1, 5):
+# Корекция: Увеличен обхват до 6, за да покрива индекси от 1 до 5 (включително)
+for i in range(1, 6):
     FIELDNAMES += [f'Hospital_{i}', f'Address_{i}', f'First_Free_{i}', f'Coords_{i}']
 
 state = {'page': DEFAULT_START_PAGE, 'consecutive_fails': 0}
@@ -134,14 +136,15 @@ def append_csv(row):
 def init_driver():
     global driver
     options = webdriver.ChromeOptions()
-    # Core Linux requirements
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     
-    # Settings from your successful PC script
-    options.add_argument('--start-maximized')
+    # Корекция: Специфични опции за по-добра стабилност в GitHub Actions (Xvfb)
+    options.add_argument('--window-size=1920,1080')
+    options.add_argument('--disable-gpu')
     options.add_argument('--disable-blink-features=AutomationControlled')
     options.add_argument('--log-level=3')
+    options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
     
     try:
         service = Service(ChromeDriverManager().install())
@@ -382,7 +385,6 @@ def scrape_doctor_profile_myhealth(url):
             
             driver.get(url)
             
-            # Use the exact waiting logic from the PC script
             WebDriverWait(driver, PROFILE_WAIT_SECONDS).until(
                 EC.presence_of_element_located((By.CLASS_NAME, 'doctor-header'))
             )
@@ -392,8 +394,10 @@ def scrape_doctor_profile_myhealth(url):
                 raise RuntimeError('Blocked / rate-limited profile detected')
             
             doc_name = get_text_safe("//div[contains(@class, 'doctor-header')]//h2/a")
+            # Корекция: Не прекратяваме изпълнението, ако липсва име (уеднаквено с PC скрипта)
             if not doc_name or doc_name == '-':
-                raise RuntimeError('Doctor name not found')
+                print(f'    [WARN] Doctor name not found for {url}.')
+                doc_name = '-'
                 
             nzok = 'Да' if driver.find_elements(By.XPATH, "//span[contains(@class, 'ww-nzok')]") else 'Не'
             phones = []
@@ -401,11 +405,13 @@ def scrape_doctor_profile_myhealth(url):
                 href = link.get_attribute('href') or ''
                 if href.startswith('tel:') and href[4:] not in phones:
                     phones.append(href[4:])
+                    
             practices = scrape_practices_detailed() or [{'Hospital': '-', 'Address': '-', 'First_Date': '-', 'Coords': '-'}]
+            
             row = {
                 'Име': doc_name,
-                'Специалност': get_text_safe("//div[contains(@class, 'doctor-speciality')]") ,
-                'Рейтинг_Инфо': get_text_safe("//span[contains(@class, 'doctor-rating-score_count')]") ,
+                'Специалност': get_text_safe("//div[contains(@class, 'doctor-speciality')]"),
+                'Рейтинг_Инфо': get_text_safe("//span[contains(@class, 'doctor-rating-score_count')]"),
                 'Първи свободен час (Общо)': get_all_first_available_dates_summary(),
                 'Телефони': ', '.join(phones) if phones else '-',
                 'НЗОК': nzok,
@@ -415,12 +421,15 @@ def scrape_doctor_profile_myhealth(url):
                 'Цени': scrape_prices_myhealth(),
                 'Застрахователи': scrape_insurances_myhealth(),
             }
-            for i in range(1, 5):
+            
+            # Корекция: Индексиране до 5 практики
+            for i in range(1, 6):
                 p = practices[i - 1] if i <= len(practices) else None
                 row[f'Hospital_{i}'] = p['Hospital'] if p else '-'
                 row[f'Address_{i}'] = p['Address'] if p else '-'
                 row[f'First_Free_{i}'] = p['First_Date'] if p else '-'
                 row[f'Coords_{i}'] = p['Coords'] if p else '-'
+                
             return row
         except Exception as e:
             print(f'    [WARN] Profile attempt failed: {e}')
@@ -444,26 +453,42 @@ def clear_continuation_flag():
 
 def main():
     global BASE_SEARCH_URL
-    BASE_SEARCH_URL = input("Моля, въведете базовия URL адрес за търсене (напр. https://myhealth.bg/search/?page=): ").strip()
-    while not BASE_SEARCH_URL:
-        BASE_SEARCH_URL = input("URL адресът не може да бъде празен. Моля, въведете отново: ").strip()
+    
+    # Корекция: Интелигентно прочитане на входните данни
+    # 1. Приоритетно проверяваме environment променливите (за YAML интеграцията)
+    env_url = os.getenv('BASE_SEARCH_URL', '').strip()
+    if env_url:
+        BASE_SEARCH_URL = env_url
+    else:
+        # 2. Ако няма променлива, проверяваме дали скриптът се изпълнява интерактивно (локално)
+        if sys.stdin.isatty():
+            BASE_SEARCH_URL = input("Моля, въведете базовия URL адрес за търсене (напр. https://myhealth.bg/search/?page=): ").strip()
+            while not BASE_SEARCH_URL:
+                BASE_SEARCH_URL = input("URL адресът не може да бъде празен. Моля, въведете отново: ").strip()
+        else:
+            # 3. В случай на пайпнати данни (echo "url" | python script.py) четем директно от stdin
+            piped_input = sys.stdin.read().strip()
+            BASE_SEARCH_URL = piped_input if piped_input else "https://myhealth.bg/search/?page="
 
     clear_continuation_flag()
     init_csv()
     load_memory()
     load_state()
     init_driver()
+    
     try:
         while True:
             if time_limit_reached():
                 save_state(); flag_for_continuation(); break
             page = int(state['page'])
             urls = load_search_page(page)
+            
             if urls is None:
                 state['consecutive_fails'] = int(state.get('consecutive_fails', 0)) + 1
                 save_state(); flag_for_continuation()
                 print(f'[ERROR] Could not load page {page}. Keeping state on same page.')
                 break
+            
             state['consecutive_fails'] = 0
             for n, url in enumerate(urls, 1):
                 if time_limit_reached():
@@ -471,6 +496,7 @@ def main():
                 if is_parsed(url):
                     print(f'  [{n}/{len(urls)}] [SKIP] Already parsed: {url}')
                     continue
+                
                 row = scrape_doctor_profile_myhealth(url)
                 if row:
                     append_csv(row)
@@ -479,6 +505,7 @@ def main():
                     print(f"  [{n}/{len(urls)}] [+] Saved: {row['Име']}")
                 else:
                     print(f'  [{n}/{len(urls)}] [FAIL] {url}')
+                    
             state['page'] = page + 1
             save_state()
             print(f'[INFO] Finished page {page}. Next page: {state["page"]}')
