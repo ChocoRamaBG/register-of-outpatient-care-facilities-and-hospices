@@ -7,8 +7,6 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 
 try:
     output_dir = os.path.dirname(os.path.abspath(__file__))
@@ -34,11 +32,7 @@ options.add_argument('--disable-gpu')
 options.add_argument('--no-sandbox')
 options.add_argument('--disable-dev-shm-usage')
 
-try:
-    service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=options)
-except Exception as e:
-    driver = webdriver.Chrome(options=options)
+driver = webdriver.Chrome(options=options)
 
 def get_text_safe(xpath, search_context=None, default="-"):
     try:
