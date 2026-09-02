@@ -1,9 +1,14 @@
 name: Run MyHealth Scraper
 
 on:
-  workflow_dispatch: # Allows manual trigger from the GitHub Actions UI
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: 'Target URL to scrape (default starts at page 1)'
+        required: true
+        default: 'https://myhealth.bg/search/?page=1'
   schedule:
-    - cron: '0 2 * * *' # Optional: Runs every day at 02:00 UTC (uncomment if daily sync is needed)
+    - cron: '0 2 * * *'
 
 jobs:
   scrape-data:
@@ -26,14 +31,19 @@ jobs:
 
       - name: Run Scraper
         env:
-          CI: true # This triggers the headless configuration in the script
+          CI: true
+          TARGET_URL: ${{ github.event.inputs.target_url || 'https://myhealth.bg/search/?page=1' }}
         run: |
           cd myhealth_scraper
           python scraper_myhealth.py
 
-      - name: Upload Scraped Data
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: myhealth-scraped-data
-          path: myhealth_scraper/myhealth_data.xlsx
+          name: myhealth-run-results
+          path: |
+            myhealth_scraper/myhealth_data.xlsx
+            myhealth_scraper/debug_screenshot.png
+          if-no-files-found: ignore
           retention-days: 7
