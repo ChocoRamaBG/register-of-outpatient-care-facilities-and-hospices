@@ -11,6 +11,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 
+# Determine output directory dynamically
 try:
     output_dir = os.path.dirname(os.path.abspath(__file__))
 except NameError:
@@ -26,21 +27,30 @@ if not os.path.exists(output_dir):
 output_filename = os.path.join(output_dir, "myhealth_data.xlsx")
 print(f"Target output file: {output_filename}")
 
+# Configure Chrome options with anti-bot evasion techniques
 options = webdriver.ChromeOptions()
 options.add_argument('--start-maximized')
 options.add_argument('--disable-blink-features=AutomationControlled')
+options.add_experimental_option("excludeSwitches", ["enable-automation"])
+options.add_experimental_option('useAutomationExtension', False)
 options.add_argument('--log-level=3')
 
 if os.environ.get('CI') == 'true':
-    options.add_argument('--headless')
+    options.add_argument('--headless=new')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--window-size=1920,1080')
+    # Spoof User-Agent to prevent Cloudflare from blocking the headless GitHub runner
+    options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
 
 print("Initializing Chrome WebDriver...")
 try:
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=options)
+    # Execute CDP command to further mask WebDriver properties
+    driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+        "source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+    })
     print("WebDriver initialized successfully.")
 except Exception as e:
     print(f"Error initializing WebDriver via manager: {e}")
@@ -290,11 +300,11 @@ def save_to_excel(data):
 
 if __name__ == "__main__":
     if os.environ.get('CI') == 'true':
-        input_url = os.environ.get('TARGET_URL', 'https://myhealth.bg/search/?page=1')
+        input_url = os.environ.get('TARGET_URL', 'https://myhealth.bg/search/?page=164')
     else:
-        input_url = input("Enter target URL to begin scraping (e.g., https://myhealth.bg/search/?page=1): ").strip()
+        input_url = input("Enter target URL to begin scraping (e.g., https://myhealth.bg/search/?page=164): ").strip()
         if not input_url:
-            input_url = 'https://myhealth.bg/search/?page=1'
+            input_url = 'https://myhealth.bg/search/?page=164'
 
     parsed_url = urllib.parse.urlparse(input_url)
     qs = urllib.parse.parse_qs(parsed_url.query)
@@ -330,6 +340,7 @@ if __name__ == "__main__":
                 
                 if not doctor_urls:
                     print("No more doctor profiles found. Terminating pagination.")
+                    print(f"Final Page Title: {driver.title}") # Will reveal if Cloudflare blocked it
                     debug_img_path = os.path.join(output_dir, "debug_screenshot.png")
                     driver.save_screenshot(debug_img_path)
                     print(f"Debug screenshot saved to: {debug_img_path}")
@@ -348,6 +359,7 @@ if __name__ == "__main__":
                 
             except Exception as e:
                 print(f"Error during pagination loop on page {current_page}: {e}")
+                print(f"Final Page Title: {driver.title}")
                 debug_img_path = os.path.join(output_dir, "debug_screenshot.png")
                 driver.save_screenshot(debug_img_path)
                 print(f"Debug screenshot saved to: {debug_img_path}")
