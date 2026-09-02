@@ -276,7 +276,7 @@ def save_to_excel(data):
     except Exception as e:
         print(f"Excel write error: {e}")
 
-page = 164
+page = 1
 
 try:
     while True:
