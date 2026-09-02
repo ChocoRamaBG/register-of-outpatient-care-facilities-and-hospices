@@ -1,15 +1,15 @@
 {
-  "query_idx": 39919,
-  "query": "ЗХ8",
+  "query_idx": 41103,
+  "query": "ЛМ2",
   "page_num": 0,
   "status": "atexit",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-09-02T13:29:09.947333",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%97%D0%A58&selectedSearchFilter=1",
-  "total_uics": 564011,
-  "last_new_uics": 1,
-  "elapsed_seconds": 19246,
+  "last_activity": "2026-09-02T18:51:21.554448",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%9B%D0%9C2&selectedSearchFilter=1",
+  "total_uics": 564043,
+  "last_new_uics": 0,
+  "elapsed_seconds": 19204,
   "error": null,
-  "saved_at": "2026-09-02T13:29:09.947340",
+  "saved_at": "2026-09-02T18:51:21.554452",
   "save_reason": "atexit"
 }
