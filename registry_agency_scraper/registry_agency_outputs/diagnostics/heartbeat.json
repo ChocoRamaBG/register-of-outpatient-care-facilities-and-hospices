@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-09-03T11:04:28.566483",
+  "timestamp": "2026-09-03T16:26:35.401980",
   "elapsed_seconds": 19200,
-  "query_idx": 45067,
-  "query": "ЧШ7",
+  "query_idx": 46356,
+  "query": "ЫЩ6",
   "page_num": 0,
   "status": "goto",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A7%D0%A87&selectedSearchFilter=1",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%AB%D0%A96&selectedSearchFilter=1",
   "total_uics": 564186,
   "last_new_uics": 1
 }
