@@ -1,15 +1,15 @@
 {
-  "query_idx": 43639,
-  "query": "УЙ8",
+  "query_idx": 45068,
+  "query": "ЧШ7",
   "page_num": 0,
   "status": "atexit",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-09-03T05:42:30.359498",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A3%D0%998&selectedSearchFilter=1",
-  "total_uics": 564178,
+  "last_activity": "2026-09-03T11:04:35.681899",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A7%D0%A87&selectedSearchFilter=1",
+  "total_uics": 564186,
   "last_new_uics": 1,
-  "elapsed_seconds": 19624,
+  "elapsed_seconds": 19207,
   "error": null,
-  "saved_at": "2026-09-03T05:42:30.359504",
+  "saved_at": "2026-09-03T11:04:35.681921",
   "save_reason": "atexit"
 }
