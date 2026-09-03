@@ -1,15 +1,15 @@
 {
-  "query_idx": 47612,
-  "query": "ЯЧ1",
+  "query_idx": 47700,
+  "query": "ЯЯ9",
   "page_num": 0,
   "status": "atexit",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-09-03T21:48:45.664060",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%AF%D0%A71&selectedSearchFilter=1",
+  "last_activity": "2026-09-03T22:11:36.870078",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%AF%D0%AF9&selectedSearchFilter=1",
   "total_uics": 564187,
   "last_new_uics": 0,
-  "elapsed_seconds": 19204,
+  "elapsed_seconds": 1240,
   "error": null,
-  "saved_at": "2026-09-03T21:48:45.664067",
+  "saved_at": "2026-09-03T22:11:36.870084",
   "save_reason": "atexit"
 }
