@@ -12,7 +12,7 @@ from selenium.webdriver.chrome.service import Service
 
 
 # =========================================================
-# OUTPUT FILE
+# OUTPUT FILES
 # =========================================================
 
 try:
@@ -27,7 +27,21 @@ output_filename = os.path.join(
     "myhealth_headless.xlsx"
 )
 
+# Debug files will be stored here
+debug_dir = os.path.join(
+    output_dir,
+    "debug"
+)
+
+os.makedirs(debug_dir, exist_ok=True)
+
+
+# =========================================================
+# CREATE EMPTY EXCEL IF IT DOES NOT EXIST
+# =========================================================
+
 if not os.path.exists(output_filename):
+
     empty_df = pd.DataFrame(columns=[
         "Име",
         "Специалност",
@@ -72,7 +86,10 @@ if chrome_binary:
 print("Initializing Chrome...")
 
 if chromedriver_binary:
-    print(f"Using ChromeDriver: {chromedriver_binary}")
+
+    print(
+        f"Using ChromeDriver: {chromedriver_binary}"
+    )
 
     service = Service(
         executable_path=chromedriver_binary
@@ -84,7 +101,11 @@ if chromedriver_binary:
     )
 
 else:
-    print("ChromeDriver path not provided. Using Selenium Manager.")
+
+    print(
+        "ChromeDriver path not provided. "
+        "Using Selenium Manager."
+    )
 
     driver = webdriver.Chrome(
         options=options
@@ -94,21 +115,104 @@ print("Chrome started successfully.")
 
 
 # =========================================================
+# DEBUG SCREENSHOT / HTML FUNCTION
+# =========================================================
+
+def save_debug_files(name):
+
+    timestamp = datetime.now().strftime(
+        "%Y%m%d_%H%M%S"
+    )
+
+    screenshot_path = os.path.join(
+        debug_dir,
+        f"{name}_{timestamp}.png"
+    )
+
+    html_path = os.path.join(
+        debug_dir,
+        f"{name}_{timestamp}.html"
+    )
+
+    # -----------------------------------------------------
+    # Screenshot
+    # -----------------------------------------------------
+
+    try:
+
+        driver.save_screenshot(
+            screenshot_path
+        )
+
+        print(
+            f"Debug screenshot saved: "
+            f"{screenshot_path}"
+        )
+
+    except Exception as e:
+
+        print(
+            f"Could not save screenshot: {e}"
+        )
+
+    # -----------------------------------------------------
+    # HTML
+    # -----------------------------------------------------
+
+    try:
+
+        with open(
+            html_path,
+            "w",
+            encoding="utf-8"
+        ) as f:
+
+            f.write(
+                driver.page_source
+            )
+
+        print(
+            f"Debug HTML saved: {html_path}"
+        )
+
+    except Exception as e:
+
+        print(
+            f"Could not save debug HTML: {e}"
+        )
+
+
+# =========================================================
 # HELPER FUNCTIONS
 # =========================================================
 
-def get_text_safe(xpath, search_context=None, default="-"):
+def get_text_safe(
+    xpath,
+    search_context=None,
+    default="-"
+):
+
     try:
-        ctx = search_context if search_context else driver
+
+        ctx = (
+            search_context
+            if search_context
+            else driver
+        )
 
         element = ctx.find_element(
             By.XPATH,
             xpath
         )
 
-        return element.text.strip().replace("\n", " ")
+        return (
+            element.text
+            .strip()
+            .replace("\n", " ")
+        )
 
     except Exception:
+
         return default
 
 
@@ -117,7 +221,9 @@ def get_text_safe(xpath, search_context=None, default="-"):
 # =========================================================
 
 def scrape_insurances_myhealth():
+
     try:
+
         logos = driver.find_elements(
             By.XPATH,
             "//div[contains(@class, 'practice__insurance-logos')]//img"
@@ -129,9 +235,14 @@ def scrape_insurances_myhealth():
             if img.get_attribute("alt")
         ]
 
-        return ", ".join(insurances) if insurances else "-"
+        return (
+            ", ".join(insurances)
+            if insurances
+            else "-"
+        )
 
     except Exception:
+
         return "-"
 
 
@@ -140,7 +251,9 @@ def scrape_insurances_myhealth():
 # =========================================================
 
 def scrape_prices_myhealth():
+
     try:
+
         price_items = driver.find_elements(
             By.XPATH,
             "//div[contains(@class, 'practice__pricing-text--item')]"
@@ -151,6 +264,7 @@ def scrape_prices_myhealth():
         for item in price_items:
 
             try:
+
                 name = item.find_element(
                     By.XPATH,
                     ".//p[contains(@class, 'dummy--reason__name')]"
@@ -166,11 +280,17 @@ def scrape_prices_myhealth():
                 )
 
             except Exception:
+
                 continue
 
-        return " | ".join(found_prices) if found_prices else "-"
+        return (
+            " | ".join(found_prices)
+            if found_prices
+            else "-"
+        )
 
     except Exception:
+
         return "-"
 
 
@@ -179,15 +299,23 @@ def scrape_prices_myhealth():
 # =========================================================
 
 def get_coordinates_from_map_link(context=None):
+
     try:
-        ctx = context if context else driver
+
+        ctx = (
+            context
+            if context
+            else driver
+        )
 
         map_link = ctx.find_element(
             By.XPATH,
             ".//a[contains(@href, 'google.com/maps') and contains(@href, 'daddr')]"
         )
 
-        href = map_link.get_attribute("href")
+        href = map_link.get_attribute(
+            "href"
+        )
 
         match = re.search(
             r"daddr=([\d\.]+),([\d\.]+)",
@@ -195,11 +323,16 @@ def get_coordinates_from_map_link(context=None):
         )
 
         if match:
-            return f"{match.group(1)}, {match.group(2)}"
+
+            return (
+                f"{match.group(1)}, "
+                f"{match.group(2)}"
+            )
 
         return "-"
 
     except Exception:
+
         return "-"
 
 
@@ -208,6 +341,7 @@ def get_coordinates_from_map_link(context=None):
 # =========================================================
 
 def get_full_biography():
+
     try:
 
         # -------------------------------------------------
@@ -227,6 +361,7 @@ def get_full_biography():
             ).strip()
 
             if text:
+
                 return text
 
         # -------------------------------------------------
@@ -250,6 +385,7 @@ def get_full_biography():
                 time.sleep(0.5)
 
         except Exception:
+
             pass
 
         # -------------------------------------------------
@@ -264,6 +400,7 @@ def get_full_biography():
         return bio_el.text.strip()
 
     except Exception:
+
         return "-"
 
 
@@ -302,7 +439,9 @@ def scrape_practices_detailed():
 
             if len(titles) == len(dates):
 
-                for i in range(len(titles)):
+                for i in range(
+                    len(titles)
+                ):
 
                     t_text = titles[i].text.strip()
 
@@ -313,7 +452,9 @@ def scrape_practices_detailed():
                     d_text = dates[i].text.strip()
 
                     final_date = (
-                        d_raw.replace("T", " ").split("+")[0]
+                        d_raw
+                        .replace("T", " ")
+                        .split("+")[0]
                         if d_raw
                         else d_text
                     )
@@ -324,9 +465,12 @@ def scrape_practices_detailed():
                         t_text.lower()
                     )[:50]
 
-                    free_dates_map[key] = final_date
+                    free_dates_map[key] = (
+                        final_date
+                    )
 
         except Exception:
+
             pass
 
         # -------------------------------------------------
@@ -352,20 +496,25 @@ def scrape_practices_detailed():
                     "doctor-details__workplace-item-address"
                 ).text.strip()
 
-                h_coords = get_coordinates_from_map_link(
-                    wp
+                h_coords = (
+                    get_coordinates_from_map_link(
+                        wp
+                    )
                 )
 
-                h_date = "Няма свободни часове"
+                h_date = (
+                    "Няма свободни часове"
+                )
 
-                # Full workplace string
                 check_str_full = re.sub(
                     r"\s+",
                     "",
-                    (h_name + h_addr).lower()
+                    (
+                        h_name
+                        + h_addr
+                    ).lower()
                 )
 
-                # Address only
                 check_str_addr = re.sub(
                     r"\s+",
                     "",
@@ -382,6 +531,7 @@ def scrape_practices_detailed():
                         k in check_str_full
                         or check_str_full in k
                     ):
+
                         h_date = v
                         break
 
@@ -390,6 +540,7 @@ def scrape_practices_detailed():
                         and len(check_str_addr) > 5
                         and check_str_addr in k
                     ):
+
                         h_date = v
                         break
 
@@ -401,6 +552,7 @@ def scrape_practices_detailed():
                 })
 
             except Exception:
+
                 continue
 
     except Exception as e:
@@ -454,9 +606,13 @@ def get_all_first_available_dates_summary():
                 txt = date_el.text.strip()
 
                 if txt:
-                    dates_found.append(txt)
+
+                    dates_found.append(
+                        txt
+                    )
 
     except Exception:
+
         pass
 
     # -----------------------------------------------------
@@ -491,6 +647,7 @@ def get_all_first_available_dates_summary():
                     )
 
         except Exception:
+
             pass
 
     return (
@@ -501,7 +658,7 @@ def get_all_first_available_dates_summary():
 
 
 # =========================================================
-# SCRAPE DOCTOR
+# SCRAPE DOCTOR PROFILE
 # =========================================================
 
 def scrape_doctor_profile_myhealth(url):
@@ -515,7 +672,10 @@ def scrape_doctor_profile_myhealth(url):
             5
         ).until(
             EC.presence_of_element_located(
-                (By.CLASS_NAME, "doctor-header")
+                (
+                    By.CLASS_NAME,
+                    "doctor-header"
+                )
             )
         )
 
@@ -551,9 +711,11 @@ def scrape_doctor_profile_myhealth(url):
                 By.XPATH,
                 "//span[contains(@class, 'ww-nzok')]"
             ):
+
                 nzok = "Да"
 
         except Exception:
+
             pass
 
         # -------------------------------------------------
@@ -570,16 +732,25 @@ def scrape_doctor_profile_myhealth(url):
             )
 
             phones = [
-                lnk.get_attribute("href")
-                .replace("tel:", "")
+                lnk.get_attribute(
+                    "href"
+                ).replace(
+                    "tel:",
+                    ""
+                )
                 for lnk in phone_links
             ]
 
         except Exception:
+
             pass
 
         phone_str = (
-            ", ".join(list(set(phones)))
+            ", ".join(
+                list(
+                    set(phones)
+                )
+            )
             if phones
             else "-"
         )
@@ -590,27 +761,37 @@ def scrape_doctor_profile_myhealth(url):
 
         doc_info = {
 
-            "Име": doc_name,
+            "Име":
+                doc_name,
 
-            "Специалност": specialty,
+            "Специалност":
+                specialty,
 
-            "Рейтинг_Инфо": rating_text,
+            "Рейтинг_Инфо":
+                rating_text,
 
-            "Телефони": phone_str,
+            "Телефони":
+                phone_str,
 
-            "НЗОК": nzok,
+            "НЗОК":
+                nzok,
 
-            "Биография": bio[:1000],
+            "Биография":
+                bio[:1000],
 
-            "URL": url,
+            "URL":
+                url,
 
-            "Timestamp": datetime.now().strftime(
-                "%Y-%m-%d %H:%M:%S"
-            ),
+            "Timestamp":
+                datetime.now().strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                ),
 
-            "Цени": scrape_prices_myhealth(),
+            "Цени":
+                scrape_prices_myhealth(),
 
-            "Застрахователи": scrape_insurances_myhealth(),
+            "Застрахователи":
+                scrape_insurances_myhealth(),
 
             "Първи свободен час (Общо)":
                 get_all_first_available_dates_summary()
@@ -620,7 +801,9 @@ def scrape_doctor_profile_myhealth(url):
         # Practices
         # -------------------------------------------------
 
-        practices = scrape_practices_detailed()
+        practices = (
+            scrape_practices_detailed()
+        )
 
         if not practices:
 
@@ -635,7 +818,9 @@ def scrape_doctor_profile_myhealth(url):
         # Maximum 5 practices
         # -------------------------------------------------
 
-        for i, p in enumerate(practices):
+        for i, p in enumerate(
+            practices
+        ):
 
             idx = i + 1
 
@@ -683,14 +868,14 @@ def scrape_doctor_profile_myhealth(url):
                 f"Coords_{i}"
             ] = "-"
 
-        # -------------------------------------------------
-        # Debug
-        # -------------------------------------------------
-
-        if doc_name == "-" or not doc_name:
+        if (
+            doc_name == "-"
+            or not doc_name
+        ):
 
             print(
-                f"Warning: Doctor name not found for {url}"
+                f"Warning: Doctor name not found "
+                f"for {url}"
             )
 
         return doc_info
@@ -715,7 +900,9 @@ def save_to_excel(data):
 
     try:
 
-        df = pd.DataFrame(data)
+        df = pd.DataFrame(
+            data
+        )
 
         cols = [
             "Име",
@@ -752,7 +939,9 @@ def save_to_excel(data):
         # Append existing Excel
         # -------------------------------------------------
 
-        if os.path.exists(output_filename):
+        if os.path.exists(
+            output_filename
+        ):
 
             try:
 
@@ -769,6 +958,7 @@ def save_to_excel(data):
                 )
 
             except Exception:
+
                 pass
 
         # -------------------------------------------------
@@ -781,7 +971,8 @@ def save_to_excel(data):
         )
 
         print(
-            f"Saved {len(data)} record(s) to {output_filename}"
+            f"Saved {len(data)} record(s) "
+            f"to {output_filename}"
         )
 
     except Exception as e:
@@ -795,9 +986,8 @@ def save_to_excel(data):
 # MAIN PAGINATION
 # =========================================================
 
-# IMPORTANT:
-# Your working PC script starts from page 164.
-page = 1
+# Your working PC scraper starts at page 164.
+page = 164
 
 
 try:
@@ -809,10 +999,41 @@ try:
         )
 
         print(
-            f"Processing page {page}: {target_url}"
+            f"Processing page {page}: "
+            f"{target_url}"
         )
 
-        driver.get(target_url)
+        # -------------------------------------------------
+        # Load page
+        # -------------------------------------------------
+
+        driver.get(
+            target_url
+        )
+
+        print(
+            f"Page loaded. "
+            f"Title: {driver.title}"
+        )
+
+        # -------------------------------------------------
+        # Immediately capture Cloudflare page
+        # -------------------------------------------------
+
+        if (
+            "Just a moment" in driver.title
+            or "Cloudflare" in driver.title
+            or "challenge" in driver.title.lower()
+        ):
+
+            print(
+                "Cloudflare challenge detected "
+                "immediately after page load."
+            )
+
+            save_debug_files(
+                f"cloudflare_initial_page_{page}"
+            )
 
         # -------------------------------------------------
         # Wait for doctor links
@@ -827,7 +1048,8 @@ try:
                 EC.presence_of_element_located(
                     (
                         By.XPATH,
-                        "//a[contains(@href, '/lekar/') and not(contains(@href, 'search'))]"
+                        "//a[contains(@href, '/lekar/') "
+                        "and not(contains(@href, 'search'))]"
                     )
                 )
             )
@@ -839,15 +1061,48 @@ try:
 
         except Exception:
 
+            current_title = driver.title
+
             print(
                 f"Timeout on page {page}. "
-                f"Current page title is: {driver.title}"
+                f"Current page title is: "
+                f"{current_title}"
             )
+
+            # -------------------------------------------------
+            # Cloudflare detection
+            # -------------------------------------------------
+
+            if (
+                "Just a moment" in current_title
+                or "Cloudflare" in current_title
+                or "challenge" in current_title.lower()
+            ):
+
+                print(
+                    "Cloudflare challenge detected "
+                    "after timeout."
+                )
+
+                save_debug_files(
+                    f"cloudflare_page_{page}"
+                )
+
+            else:
+
+                print(
+                    "Regular page timeout detected. "
+                    "Saving debug files."
+                )
+
+                save_debug_files(
+                    f"timeout_page_{page}"
+                )
 
             all_links = []
 
         # -------------------------------------------------
-        # Find doctor URLs
+        # Extract doctor URLs
         # -------------------------------------------------
 
         doctor_urls = []
@@ -867,7 +1122,9 @@ try:
                 and "search" not in href
             ):
 
-                doctor_urls.append(href)
+                doctor_urls.append(
+                    href
+                )
 
         # -------------------------------------------------
         # Remove duplicates
@@ -878,7 +1135,7 @@ try:
         )
 
         # -------------------------------------------------
-        # Stop if page has no doctors
+        # Stop if no doctors found
         # -------------------------------------------------
 
         if not doctor_urls:
@@ -891,7 +1148,8 @@ try:
             break
 
         print(
-            f"Found {len(doctor_urls)} doctor profile(s)."
+            f"Found {len(doctor_urls)} "
+            f"doctor profile(s)."
         )
 
         # -------------------------------------------------
@@ -904,8 +1162,10 @@ try:
                 f"Scraping: {u}"
             )
 
-            res = scrape_doctor_profile_myhealth(
-                u
+            res = (
+                scrape_doctor_profile_myhealth(
+                    u
+                )
             )
 
             if res:
@@ -924,7 +1184,8 @@ try:
 except Exception as e:
 
     print(
-        f"Execution error during pagination: {e}"
+        f"Execution error during pagination: "
+        f"{e}"
     )
 
 
@@ -935,9 +1196,11 @@ finally:
         driver.quit()
 
     except Exception:
+
         pass
 
     print(
         f"Process finished. "
-        f"Output saved to: {output_filename}"
+        f"Output saved to: "
+        f"{output_filename}"
     )
