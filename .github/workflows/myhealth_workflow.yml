@@ -25,17 +25,30 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      # Добавяме изрична инсталация на Chrome, за да не гърми undetected-chromedriver
       - name: Setup Chrome
-        uses: browser-actions/setup-chrome@v1
+        id: setup-chrome
+        uses: browser-actions/setup-chrome@v2
+        with:
+          chrome-version: stable
+          install-chromedriver: true
+
+      - name: Show Chrome versions
+        run: |
+          echo "Chrome version:"
+          ${{ steps.setup-chrome.outputs.chrome-path }} --version
+
+          echo "ChromeDriver version:"
+          ${{ steps.setup-chrome.outputs.chromedriver-path }} --version
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # Тук добавихме undetected-chromedriver
-          python -m pip install selenium pandas openpyxl undetected-chromedriver
+          python -m pip install selenium pandas openpyxl
 
       - name: Run scraper
+        env:
+          CHROME_BINARY: ${{ steps.setup-chrome.outputs.chrome-path }}
+          CHROMEDRIVER_BINARY: ${{ steps.setup-chrome.outputs.chromedriver-path }}
         run: python myhealth_scraper/scraper_myhealth.py
 
       - name: Upload Excel output
