@@ -59,3 +59,12 @@ jobs:
           path: myhealth_scraper/myhealth_headless.xlsx
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Upload Cloudflare screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: myhealth-debug-screenshots
+          path: myhealth_scraper/debug/
+          if-no-files-found: warn
+          retention-days: 14
