@@ -1,15 +1,15 @@
 {
-  "query_idx": 42356,
-  "query": "ПЙ5",
+  "query_idx": 43639,
+  "query": "УЙ8",
   "page_num": 0,
   "status": "atexit",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-09-03T00:13:38.591201",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%9F%D0%995&selectedSearchFilter=1",
-  "total_uics": 564114,
+  "last_activity": "2026-09-03T05:42:30.359498",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A3%D0%998&selectedSearchFilter=1",
+  "total_uics": 564178,
   "last_new_uics": 1,
-  "elapsed_seconds": 19221,
+  "elapsed_seconds": 19624,
   "error": null,
-  "saved_at": "2026-09-03T00:13:38.591211",
+  "saved_at": "2026-09-03T05:42:30.359504",
   "save_reason": "atexit"
 }
