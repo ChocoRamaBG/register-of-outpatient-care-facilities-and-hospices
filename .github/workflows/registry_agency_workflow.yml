@@ -57,8 +57,10 @@ jobs:
             git add -f registry_agency_outputs/savegame_registry_agency.json
           fi
           
-          if [ -f "registry_agency_outputs/registry_agency_data_mega.csv" ]; then
-            git add -f registry_agency_outputs/registry_agency_data_mega.csv
+          # РАЗБИРААЙ ТУКА ПРОМЕНИХМЕ ДА ХВАЩА ВСИЧКИ CSV ФАЙЛОВЕ
+          # Използваме ls, за да проверим дали изобщо съществува такъв файл преди добавяне
+          if ls registry_agency_outputs/registry_agency_data_mega*.csv 1> /dev/null 2>&1; then
+            git add -f registry_agency_outputs/registry_agency_data_mega*.csv
           fi
           
           if git diff --staged --quiet; then
