@@ -1,19 +1,19 @@
-Timestamp: 2026-09-11T12:32:54.547162
-Label: query=BVG, retry=1
+Timestamp: 2026-09-11T17:53:52.521424
+Label: query=DPW, retry=1
 Exception: RuntimeError('RATE_LIMIT')
 
 STATE:
 {
-  "query_idx": 48928,
-  "query": "BVG",
+  "query_idx": 50140,
+  "query": "DPW",
   "page_num": 0,
   "status": "goto",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-09-11T12:32:53.040605",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=BVG&selectedSearchFilter=1",
+  "last_activity": "2026-09-11T17:53:51.015736",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=DPW&selectedSearchFilter=1",
   "total_uics": 564219,
   "last_new_uics": 1,
-  "elapsed_seconds": 19157,
+  "elapsed_seconds": 19080,
   "error": null
 }
 
