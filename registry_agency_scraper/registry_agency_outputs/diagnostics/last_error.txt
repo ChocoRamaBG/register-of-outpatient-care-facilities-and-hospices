@@ -1,25 +1,25 @@
-Timestamp: 2026-09-03T22:10:55.194261
-Label: query=ЯЯ9, retry=1
+Timestamp: 2026-09-11T12:32:54.547162
+Label: query=BVG, retry=1
 Exception: RuntimeError('RATE_LIMIT')
 
 STATE:
 {
-  "query_idx": 47699,
-  "query": "ЯЯ9",
+  "query_idx": 48928,
+  "query": "BVG",
   "page_num": 0,
   "status": "goto",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-09-03T22:10:53.684786",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%AF%D0%AF9&selectedSearchFilter=1",
-  "total_uics": 564187,
-  "last_new_uics": 0,
-  "elapsed_seconds": 1197,
+  "last_activity": "2026-09-11T12:32:53.040605",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=BVG&selectedSearchFilter=1",
+  "total_uics": 564219,
+  "last_new_uics": 1,
+  "elapsed_seconds": 19157,
   "error": null
 }
 
 TRACEBACK:
 Traceback (most recent call last):
-  File "/home/runner/work/register-of-outpatient-care-facilities-and-hospices/register-of-outpatient-care-facilities-and-hospices/registry_agency_scraper/eik_extractor.py", line 843, in main
+  File "/home/runner/work/register-of-outpatient-care-facilities-and-hospices/register-of-outpatient-care-facilities-and-hospices/registry_agency_scraper/eik_extractor.py", line 888, in main
     raise RuntimeError(
 RuntimeError: RATE_LIMIT
 
