@@ -1,15 +1,15 @@
 {
-  "query_idx": 50149,
-  "query": "DQE",
+  "query_idx": 51556,
+  "query": "FSH",
   "page_num": 0,
   "status": "atexit",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-09-11T17:55:51.318618",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=DQE&selectedSearchFilter=1",
-  "total_uics": 564219,
+  "last_activity": "2026-09-11T23:18:09.898566",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=FSH&selectedSearchFilter=1",
+  "total_uics": 564220,
   "last_new_uics": 1,
-  "elapsed_seconds": 19201,
+  "elapsed_seconds": 19206,
   "error": null,
-  "saved_at": "2026-09-11T17:55:51.318624",
+  "saved_at": "2026-09-11T23:18:09.898571",
   "save_reason": "atexit"
 }

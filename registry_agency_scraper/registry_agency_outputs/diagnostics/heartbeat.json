@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-09-11T17:55:50.399026",
+  "timestamp": "2026-09-11T23:18:03.943706",
   "elapsed_seconds": 19200,
-  "query_idx": 50148,
-  "query": "DQE",
+  "query_idx": 51555,
+  "query": "FSH",
   "page_num": 0,
   "status": "goto",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=DQE&selectedSearchFilter=1",
-  "total_uics": 564219,
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=FSH&selectedSearchFilter=1",
+  "total_uics": 564220,
   "last_new_uics": 1
 }
