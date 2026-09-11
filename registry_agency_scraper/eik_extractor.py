@@ -702,12 +702,57 @@ def main():
         for c in digits
     ]
 
-    search_queries = (
+    en_triples = [
+        a + b + c
+        for a in en_alphabet
+        for b in en_alphabet
+        for c in en_alphabet
+    ]
+
+    en_double_digit = [
+        a + b + c
+        for a in en_alphabet
+        for b in en_alphabet
+        for c in digits
+    ]
+
+    digit_triples = [
+        a + b + c
+        for a in digits
+        for b in digits
+        for c in digits
+    ]
+
+    digit_quads = [
+        f"{i:04d}"
+        for i in range(10000)
+    ]
+
+    common_keywords = [
+        "ЕООД", "ООД", "АД", "ЕАД", "ЕТ", "КЧТ", "ДЗЗД", "СД", "КД",
+        "ГРУП", "GROUP", "ИНВЕСТ", "INVEST", "СТРОЙ", "STROY",
+        "ТРАНС", "TRANS", "ТРЕЙД", "TRADE", "АУТО", "AUTO",
+        "КОМЕРС", "БГ", "BG", "БЪЛГАРИЯ", "BULGARIA", "КОНСУЛТ",
+        "CONSULT", "ПРОДЖЕКТ", "PROJECT", "ИМОТ", "ИМОТИ",
+        "МЕДИКА", "ФАРМА", "ИВАН", "ПЕТЪР", "ГЕОРГИ", "ДИМИТЪР",
+        "НИКОЛАЙ", "ХРИСТО", "МАРИЯ", "ЕЛЕНА", "СОФИЯ", "ВАРНА",
+        "ПЛОВДИВ", "БУРГАС", "РУСЕ"
+    ]
+
+    search_queries_raw = (
         single_chars +
         double_chars +
         bg_triples +
-        bg_double_digit
+        bg_double_digit +
+        en_triples +
+        en_double_digit +
+        digit_triples +
+        digit_quads +
+        common_keywords
     )
+
+    # Премахване на евентуални дубликати, като се запазва първоначалният ред
+    search_queries = list(dict.fromkeys(search_queries_raw))
 
     log_msg(
         f"[INFO] Общо комбинации: "
