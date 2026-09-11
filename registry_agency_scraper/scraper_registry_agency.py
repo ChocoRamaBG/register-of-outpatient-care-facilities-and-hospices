@@ -23,7 +23,18 @@ except NameError:
 output_dir = os.path.join(base_dir, "registry_agency_outputs")
 os.makedirs(output_dir, exist_ok=True)
 
-csv_file_path = os.path.join(output_dir, 'registry_agency_data_mega.csv')
+# Новата логика за динамично генериране на файлове под 90MB
+def get_active_csv_path(directory, base_filename="registry_agency_data_mega"):
+    part = 1
+    while True:
+        suffix = f"_part{part}" if part > 1 else ""
+        file_path = os.path.join(directory, f"{base_filename}{suffix}.csv")
+        
+        # Ако не съществува или е под ~90MB (94371840 bytes)
+        if not os.path.exists(file_path) or os.path.getsize(file_path) < 94371840:
+            return file_path
+        part += 1
+
 memory_file_path = os.path.join(output_dir, 'processed_uics_registry.txt')
 state_file = os.path.join(output_dir, "savegame_registry_agency.json")
 CONTINUE_FLAG_FILE = os.path.join(output_dir, "CONTINUE_FLAG_REGISTRY_AGENCY")
@@ -201,8 +212,14 @@ def scrape_company(uic_str, page, base_url, processed_uics, csv_writer_args):
         if other_data:
             row_data["Other_Data"] = json.dumps(other_data, ensure_ascii=False)
 
-        with open(csv_file_path, mode='a', newline='', encoding='utf-8-sig') as f:
+        # РАЗБИРААЙ - тука вземаме актуалния файл, за да не се прецакаме с размера
+        current_csv_file = get_active_csv_path(output_dir)
+        file_exists = os.path.exists(current_csv_file)
+
+        with open(current_csv_file, mode='a', newline='', encoding='utf-8-sig') as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
+            if not file_exists:
+                writer.writeheader()
             writer.writerow(row_data)
 
         save_to_memory(uic_str)
@@ -241,8 +258,10 @@ def main():
         "18. Natural person - trader": "18. Физическо лице - търговец", "18. Физическо лице - търговец": "18. Физическо лице - търговец"
     }
 
-    if not os.path.exists(csv_file_path):
-        with open(csv_file_path, mode='w', newline='', encoding='utf-8-sig') as f:
+    # Първоначална инициализация на първия валиден файл
+    current_csv_file = get_active_csv_path(output_dir)
+    if not os.path.exists(current_csv_file):
+        with open(current_csv_file, mode='w', newline='', encoding='utf-8-sig') as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
             writer.writeheader()
 
