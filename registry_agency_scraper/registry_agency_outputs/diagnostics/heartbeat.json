@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-09-12T04:40:41.852981",
-  "elapsed_seconds": 19200,
-  "query_idx": 52951,
-  "query": "HTZ",
+  "timestamp": "2026-09-12T10:03:58.777721",
+  "elapsed_seconds": 19290,
+  "query_idx": 54126,
+  "query": "JNE",
   "page_num": 0,
   "status": "goto",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=HTZ&selectedSearchFilter=1",
-  "total_uics": 564223,
-  "last_new_uics": 1
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=JNE&selectedSearchFilter=1",
+  "total_uics": 564238,
+  "last_new_uics": 0
 }

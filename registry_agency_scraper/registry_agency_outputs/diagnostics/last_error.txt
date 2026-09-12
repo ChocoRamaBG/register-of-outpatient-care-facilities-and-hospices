@@ -1,19 +1,19 @@
-Timestamp: 2026-09-12T04:38:56.663074
-Label: query=HTR, retry=2
-Exception: TimeoutError('Page.goto: Timeout 30000ms exceeded.\nCall log:\n  - navigating to "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=HTR&selectedSearchFilter=1", waiting until "domcontentloaded"\n')
+Timestamp: 2026-09-12T10:03:28.009709
+Label: query=JNE, retry=3
+Exception: TimeoutError('Page.goto: Timeout 30000ms exceeded.\nCall log:\n  - navigating to "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=JNE&selectedSearchFilter=1", waiting until "domcontentloaded"\n')
 
 STATE:
 {
-  "query_idx": 52943,
-  "query": "HTR",
+  "query_idx": 54126,
+  "query": "JNE",
   "page_num": 0,
   "status": "goto",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-09-12T04:38:41.851099",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=HTR&selectedSearchFilter=1",
-  "total_uics": 564223,
-  "last_new_uics": 1,
-  "elapsed_seconds": 19080,
+  "last_activity": "2026-09-12T10:02:58.776726",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=JNE&selectedSearchFilter=1",
+  "total_uics": 564238,
+  "last_new_uics": 0,
+  "elapsed_seconds": 19230,
   "error": null
 }
 
@@ -35,6 +35,6 @@ Traceback (most recent call last):
     raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
 playwright._impl._errors.TimeoutError: Page.goto: Timeout 30000ms exceeded.
 Call log:
-  - navigating to "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=HTR&selectedSearchFilter=1", waiting until "domcontentloaded"
+  - navigating to "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=JNE&selectedSearchFilter=1", waiting until "domcontentloaded"
 
 
