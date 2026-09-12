@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-09-11T23:18:03.943706",
+  "timestamp": "2026-09-12T04:40:41.852981",
   "elapsed_seconds": 19200,
-  "query_idx": 51555,
-  "query": "FSH",
+  "query_idx": 52951,
+  "query": "HTZ",
   "page_num": 0,
   "status": "goto",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=FSH&selectedSearchFilter=1",
-  "total_uics": 564220,
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=HTZ&selectedSearchFilter=1",
+  "total_uics": 564223,
   "last_new_uics": 1
 }
