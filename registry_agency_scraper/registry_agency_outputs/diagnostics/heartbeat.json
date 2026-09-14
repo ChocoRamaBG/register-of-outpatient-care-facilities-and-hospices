@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-09-14T17:52:17.393622",
-  "elapsed_seconds": 19230,
-  "query_idx": 56545,
-  "query": "ВШ45",
+  "timestamp": "2026-09-14T23:16:10.309075",
+  "elapsed_seconds": 19200,
+  "query_idx": 57945,
+  "query": "ГЖ45",
   "page_num": 0,
-  "status": "generic_error",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%92%D0%A845&selectedSearchFilter=1",
-  "total_uics": 564252,
+  "status": "goto",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%93%D0%9645&selectedSearchFilter=1",
+  "total_uics": 564256,
   "last_new_uics": 1
 }
