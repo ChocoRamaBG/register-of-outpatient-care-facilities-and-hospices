@@ -1,15 +1,15 @@
 {
-  "query_idx": 59194,
-  "query": "ГТ93",
+  "query_idx": 60406,
+  "query": "ГЯ05",
   "page_num": 0,
   "status": "atexit",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-09-15T04:41:30.217103",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%93%D0%A293&selectedSearchFilter=1",
-  "total_uics": 564262,
+  "last_activity": "2026-09-15T10:03:37.794650",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%93%D0%AF05&selectedSearchFilter=1",
+  "total_uics": 564263,
   "last_new_uics": 1,
-  "elapsed_seconds": 19385,
+  "elapsed_seconds": 19204,
   "error": null,
-  "saved_at": "2026-09-15T04:41:30.217109",
+  "saved_at": "2026-09-15T10:03:37.794656",
   "save_reason": "atexit"
 }
