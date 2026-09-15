@@ -1,19 +1,19 @@
-Timestamp: 2026-09-15T10:02:56.417169
-Label: query=ГЯ05, retry=1
+Timestamp: 2026-09-15T15:24:58.972397
+Label: query=ДЛ01, retry=1
 Exception: RuntimeError('RATE_LIMIT')
 
 STATE:
 {
-  "query_idx": 60405,
-  "query": "ГЯ05",
+  "query_idx": 61601,
+  "query": "ДЛ01",
   "page_num": 0,
   "status": "goto",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-09-15T10:02:54.910032",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%93%D0%AF05&selectedSearchFilter=1",
-  "total_uics": 564263,
+  "last_activity": "2026-09-15T15:24:57.465930",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%94%D0%9B01&selectedSearchFilter=1",
+  "total_uics": 564271,
   "last_new_uics": 1,
-  "elapsed_seconds": 19161,
+  "elapsed_seconds": 19150,
   "error": null
 }
 
