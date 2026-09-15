@@ -1,15 +1,15 @@
 {
-  "query_idx": 61603,
-  "query": "ДЛ02",
+  "query_idx": 63020,
+  "query": "ДЩ19",
   "page_num": 0,
   "status": "atexit",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-09-15T15:25:49.976570",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%94%D0%9B02&selectedSearchFilter=1",
-  "total_uics": 564271,
+  "last_activity": "2026-09-15T20:48:11.506580",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%94%D0%A919&selectedSearchFilter=1",
+  "total_uics": 564277,
   "last_new_uics": 1,
-  "elapsed_seconds": 19202,
+  "elapsed_seconds": 19204,
   "error": null,
-  "saved_at": "2026-09-15T15:25:49.976575",
+  "saved_at": "2026-09-15T20:48:11.506586",
   "save_reason": "atexit"
 }
