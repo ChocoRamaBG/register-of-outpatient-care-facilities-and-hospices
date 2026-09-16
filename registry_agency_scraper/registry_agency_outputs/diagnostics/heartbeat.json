@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-09-15T20:48:07.331532",
+  "timestamp": "2026-09-16T02:10:31.203060",
   "elapsed_seconds": 19200,
-  "query_idx": 63019,
-  "query": "ДЩ19",
+  "query_idx": 64411,
+  "query": "ЕЗ11",
   "page_num": 0,
   "status": "goto",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%94%D0%A919&selectedSearchFilter=1",
-  "total_uics": 564277,
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%95%D0%9711&selectedSearchFilter=1",
+  "total_uics": 564279,
   "last_new_uics": 1
 }
