@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-09-16T18:18:02.955580",
+  "timestamp": "2026-09-16T23:40:36.125779",
   "elapsed_seconds": 19200,
-  "query_idx": 68477,
-  "query": "ЖП77",
+  "query_idx": 69809,
+  "query": "ЖЭ09",
   "page_num": 0,
   "status": "goto",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%96%D0%9F77&selectedSearchFilter=1",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%96%D0%AD09&selectedSearchFilter=1",
   "total_uics": 564301,
   "last_new_uics": 1
 }
