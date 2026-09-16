@@ -1,19 +1,19 @@
-Timestamp: 2026-09-16T07:32:50.032659
-Label: query=ЕФ38, retry=1
+Timestamp: 2026-09-16T12:53:54.193724
+Label: query=ЖБ50, retry=1
 Exception: RuntimeError('RATE_LIMIT')
 
 STATE:
 {
-  "query_idx": 65738,
-  "query": "ЕФ38",
+  "query_idx": 67050,
+  "query": "ЖБ50",
   "page_num": 0,
   "status": "goto",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-09-16T07:32:48.525939",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%95%D0%A438&selectedSearchFilter=1",
+  "last_activity": "2026-09-16T12:53:52.688079",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%96%D0%9150&selectedSearchFilter=1",
   "total_uics": 564301,
   "last_new_uics": 1,
-  "elapsed_seconds": 19195,
+  "elapsed_seconds": 19081,
   "error": null
 }
 

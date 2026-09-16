@@ -1,15 +1,15 @@
 {
-  "query_idx": 65739,
-  "query": "ЕФ38",
+  "query_idx": 67059,
+  "query": "ЖБ58",
   "page_num": 0,
   "status": "atexit",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-09-16T07:33:31.388316",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%95%D0%A438&selectedSearchFilter=1",
+  "last_activity": "2026-09-16T12:55:53.844436",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%96%D0%9158&selectedSearchFilter=1",
   "total_uics": 564301,
   "last_new_uics": 1,
-  "elapsed_seconds": 19238,
+  "elapsed_seconds": 19202,
   "error": null,
-  "saved_at": "2026-09-16T07:33:31.388323",
+  "saved_at": "2026-09-16T12:55:53.844445",
   "save_reason": "atexit"
 }
