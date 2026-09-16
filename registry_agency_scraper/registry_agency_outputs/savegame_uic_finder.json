@@ -1,15 +1,15 @@
 {
-  "query_idx": 67059,
-  "query": "ЖБ58",
+  "query_idx": 68478,
+  "query": "ЖП77",
   "page_num": 0,
   "status": "atexit",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-09-16T12:55:53.844436",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%96%D0%9158&selectedSearchFilter=1",
+  "last_activity": "2026-09-16T18:18:08.626570",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%96%D0%9F77&selectedSearchFilter=1",
   "total_uics": 564301,
   "last_new_uics": 1,
-  "elapsed_seconds": 19202,
+  "elapsed_seconds": 19205,
   "error": null,
-  "saved_at": "2026-09-16T12:55:53.844445",
+  "saved_at": "2026-09-16T18:18:08.626577",
   "save_reason": "atexit"
 }
