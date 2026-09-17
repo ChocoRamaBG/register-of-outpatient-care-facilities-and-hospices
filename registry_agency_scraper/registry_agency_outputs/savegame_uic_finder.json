@@ -1,15 +1,15 @@
 {
-  "query_idx": 71211,
-  "query": "ЗЛ10",
+  "query_idx": 72514,
+  "query": "ЗШ13",
   "page_num": 0,
   "status": "atexit",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-09-17T05:03:37.978510",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%97%D0%9B10&selectedSearchFilter=1",
+  "last_activity": "2026-09-17T10:26:10.557967",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%97%D0%A813&selectedSearchFilter=1",
   "total_uics": 564302,
   "last_new_uics": 1,
-  "elapsed_seconds": 19225,
+  "elapsed_seconds": 19207,
   "error": null,
-  "saved_at": "2026-09-17T05:03:37.978516",
+  "saved_at": "2026-09-17T10:26:10.557973",
   "save_reason": "atexit"
 }
