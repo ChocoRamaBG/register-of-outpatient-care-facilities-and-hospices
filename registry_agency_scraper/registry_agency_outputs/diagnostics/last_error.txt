@@ -1,19 +1,19 @@
-Timestamp: 2026-09-17T10:24:50.206369
-Label: query=ЗШ09, retry=1
+Timestamp: 2026-09-17T15:46:49.519070
+Label: query=ИГ86, retry=1
 Exception: RuntimeError('RATE_LIMIT')
 
 STATE:
 {
-  "query_idx": 72509,
-  "query": "ЗШ09",
+  "query_idx": 73686,
+  "query": "ИГ86",
   "page_num": 0,
   "status": "goto",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-09-17T10:24:48.700954",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%97%D0%A809&selectedSearchFilter=1",
-  "total_uics": 564302,
+  "last_activity": "2026-09-17T15:46:48.015154",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%98%D0%9386&selectedSearchFilter=1",
+  "total_uics": 564308,
   "last_new_uics": 1,
-  "elapsed_seconds": 19125,
+  "elapsed_seconds": 19094,
   "error": null
 }
 

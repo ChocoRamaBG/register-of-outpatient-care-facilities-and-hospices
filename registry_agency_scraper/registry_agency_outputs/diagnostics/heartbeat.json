@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-09-17T10:26:03.480951",
+  "timestamp": "2026-09-17T15:48:33.707897",
   "elapsed_seconds": 19200,
-  "query_idx": 72513,
-  "query": "ЗШ13",
+  "query_idx": 73693,
+  "query": "ИГ93",
   "page_num": 0,
   "status": "goto",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%97%D0%A813&selectedSearchFilter=1",
-  "total_uics": 564302,
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%98%D0%9393&selectedSearchFilter=1",
+  "total_uics": 564308,
   "last_new_uics": 1
 }
