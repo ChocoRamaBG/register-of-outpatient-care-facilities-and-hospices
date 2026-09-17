@@ -1,15 +1,15 @@
 {
-  "query_idx": 73694,
-  "query": "ИГ93",
+  "query_idx": 75101,
+  "query": "ИТ00",
   "page_num": 0,
   "status": "atexit",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-09-17T15:48:38.521938",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%98%D0%9393&selectedSearchFilter=1",
-  "total_uics": 564308,
+  "last_activity": "2026-09-17T21:12:14.757567",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%98%D0%A200&selectedSearchFilter=1",
+  "total_uics": 564311,
   "last_new_uics": 1,
-  "elapsed_seconds": 19205,
+  "elapsed_seconds": 19282,
   "error": null,
-  "saved_at": "2026-09-17T15:48:38.521942",
+  "saved_at": "2026-09-17T21:12:14.757573",
   "save_reason": "atexit"
 }
