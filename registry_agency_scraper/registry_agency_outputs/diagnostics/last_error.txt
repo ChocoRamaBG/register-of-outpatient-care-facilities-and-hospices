@@ -1,19 +1,19 @@
-Timestamp: 2026-09-19T05:34:57.580293
-Label: query=ЛБ03, retry=3
-Exception: TimeoutError('Page.goto: Timeout 30000ms exceeded.\nCall log:\n  - navigating to "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%9B%D0%9103&selectedSearchFilter=1", waiting until "domcontentloaded"\n')
+Timestamp: 2026-09-19T11:01:59.880043
+Label: query=ЛО43, retry=3
+Exception: TimeoutError('Page.goto: Timeout 30000ms exceeded.\nCall log:\n  - navigating to "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%9B%D0%9E43&selectedSearchFilter=1", waiting until "domcontentloaded"\n')
 
 STATE:
 {
-  "query_idx": 83003,
-  "query": "ЛБ03",
+  "query_idx": 84343,
+  "query": "ЛО43",
   "page_num": 0,
   "status": "goto",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-09-19T05:34:28.877713",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%9B%D0%9103&selectedSearchFilter=1",
+  "last_activity": "2026-09-19T11:01:34.888084",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%9B%D0%9E43&selectedSearchFilter=1",
   "total_uics": 564332,
   "last_new_uics": 0,
-  "elapsed_seconds": 19260,
+  "elapsed_seconds": 19290,
   "error": null
 }
 
@@ -35,6 +35,6 @@ Traceback (most recent call last):
     raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
 playwright._impl._errors.TimeoutError: Page.goto: Timeout 30000ms exceeded.
 Call log:
-  - navigating to "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%9B%D0%9103&selectedSearchFilter=1", waiting until "domcontentloaded"
+  - navigating to "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%9B%D0%9E43&selectedSearchFilter=1", waiting until "domcontentloaded"
 
 
