@@ -1,15 +1,15 @@
 {
-  "query_idx": 80570,
-  "query": "КИ69",
+  "query_idx": 81768,
+  "query": "КФ67",
   "page_num": 0,
   "status": "atexit",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-09-18T18:47:38.931348",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%9A%D0%9869&selectedSearchFilter=1",
-  "total_uics": 564327,
-  "last_new_uics": 1,
-  "elapsed_seconds": 19223,
+  "last_activity": "2026-09-19T00:10:35.986463",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%9A%D0%A467&selectedSearchFilter=1",
+  "total_uics": 564331,
+  "last_new_uics": 0,
+  "elapsed_seconds": 19234,
   "error": null,
-  "saved_at": "2026-09-18T18:47:38.931353",
+  "saved_at": "2026-09-19T00:10:35.986470",
   "save_reason": "atexit"
 }

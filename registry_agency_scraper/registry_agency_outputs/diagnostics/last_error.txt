@@ -1,19 +1,19 @@
-Timestamp: 2026-09-18T18:46:57.817695
-Label: query=КИ69, retry=1
+Timestamp: 2026-09-19T00:09:54.542701
+Label: query=КФ67, retry=1
 Exception: RuntimeError('RATE_LIMIT')
 
 STATE:
 {
-  "query_idx": 80569,
-  "query": "КИ69",
+  "query_idx": 81767,
+  "query": "КФ67",
   "page_num": 0,
   "status": "goto",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-09-18T18:46:56.311796",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%9A%D0%9869&selectedSearchFilter=1",
-  "total_uics": 564327,
-  "last_new_uics": 1,
-  "elapsed_seconds": 19180,
+  "last_activity": "2026-09-19T00:09:53.035811",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%9A%D0%A467&selectedSearchFilter=1",
+  "total_uics": 564331,
+  "last_new_uics": 0,
+  "elapsed_seconds": 19191,
   "error": null
 }
 
