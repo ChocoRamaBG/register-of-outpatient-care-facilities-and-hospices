@@ -1,15 +1,15 @@
 {
-  "query_idx": 90122,
-  "query": "НИ21",
+  "query_idx": 91430,
+  "query": "НХ29",
   "page_num": 0,
   "status": "atexit",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-09-20T14:10:41.075823",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%9D%D0%9821&selectedSearchFilter=1",
-  "total_uics": 564394,
+  "last_activity": "2026-09-20T19:34:10.721999",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%9D%D0%A529&selectedSearchFilter=1",
+  "total_uics": 564399,
   "last_new_uics": 1,
-  "elapsed_seconds": 19204,
+  "elapsed_seconds": 19245,
   "error": null,
-  "saved_at": "2026-09-20T14:10:41.075829",
+  "saved_at": "2026-09-20T19:34:10.722005",
   "save_reason": "atexit"
 }
