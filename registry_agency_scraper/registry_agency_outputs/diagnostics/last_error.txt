@@ -1,19 +1,19 @@
-Timestamp: 2026-09-20T03:21:51.527390
-Label: query=МР68, retry=1
+Timestamp: 2026-09-20T08:46:56.176799
+Label: query=МЮ10, retry=1
 Exception: RuntimeError('RATE_LIMIT')
 
 STATE:
 {
-  "query_idx": 87768,
-  "query": "МР68",
+  "query_idx": 89110,
+  "query": "МЮ10",
   "page_num": 0,
   "status": "goto",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-09-20T03:21:50.021758",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%9C%D0%A068&selectedSearchFilter=1",
-  "total_uics": 564377,
+  "last_activity": "2026-09-20T08:46:54.670862",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%9C%D0%AE10&selectedSearchFilter=1",
+  "total_uics": 564389,
   "last_new_uics": 1,
-  "elapsed_seconds": 19108,
+  "elapsed_seconds": 19189,
   "error": null
 }
 
