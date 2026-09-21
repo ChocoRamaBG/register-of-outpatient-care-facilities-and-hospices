@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-09-21T00:57:05.121766",
+  "timestamp": "2026-09-21T06:20:04.831784",
   "elapsed_seconds": 19200,
-  "query_idx": 92716,
-  "query": "ОВ16",
+  "query_idx": 94127,
+  "query": "ОР27",
   "page_num": 0,
   "status": "goto",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%9E%D0%9216&selectedSearchFilter=1",
-  "total_uics": 564399,
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%9E%D0%A027&selectedSearchFilter=1",
+  "total_uics": 564400,
   "last_new_uics": 1
 }
