@@ -1,19 +1,19 @@
-Timestamp: 2026-09-21T17:05:49.630911
-Label: query=ПИ89, retry=1
+Timestamp: 2026-09-21T22:28:56.094844
+Label: query=ПФ35, retry=1
 Exception: RuntimeError('RATE_LIMIT')
 
 STATE:
 {
-  "query_idx": 96589,
-  "query": "ПИ89",
+  "query_idx": 97735,
+  "query": "ПФ35",
   "page_num": 0,
   "status": "goto",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-09-21T17:05:48.123082",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%9F%D0%9889&selectedSearchFilter=1",
-  "total_uics": 564406,
+  "last_activity": "2026-09-21T22:28:54.588489",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%9F%D0%A435&selectedSearchFilter=1",
+  "total_uics": 564411,
   "last_new_uics": 1,
-  "elapsed_seconds": 19175,
+  "elapsed_seconds": 19134,
   "error": null
 }
 
