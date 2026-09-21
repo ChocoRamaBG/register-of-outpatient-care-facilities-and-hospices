@@ -1,0 +1,412 @@
+<!DOCTYPE html><html><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>ЕПЗЕУ</title>
+    <base href="/CR/">
+    <link href="/images/favicon.ico" rel="shortcut icon" type="image/vnd.microsoft.icon">
+    <link rel="stylesheet" href="/CR/dist/vendor.css?v=KQyUJBKo9XMHjS4zXd4mhi1HWZB36UU-FVOdv5JFQhc">
+    <link rel="stylesheet" href="/CR/css/siteCss.min.css?v=zXGghYwNanUocv95bvgeGf1WnY4dsdfZjSpZB8E2Y28">
+</head>
+<body>
+    
+
+    <div class="layout-wrapper">
+
+		
+    	<div id="header-wrapper" class="header-wrapper">
+			<header class="header">
+	            <div class="row header-container fixed-content-width">
+	                <div class="col-auto">
+	                    <a href="/"><img class="registryagency-text d-none d-lg-inline-block" src="/images/registryagency-text.svg"></a><a href="/"><img class="registryagency-logo" src="/images/registryagency-logo.svg"></a><div class="divider d-none d-sm-inline-block"></div>
+	                </div>
+
+											<div class="col header-title header-title--register">
+				        	<h1 nav_key="title"></h1>
+				        	<p>Единен портал за заявяване на електронни административни услуги</p>
+				        </div>
+							            </div>
+
+	        	<div class="brand-line brand-line--header"></div>
+			</header>
+
+			<nav class="navbar-top">
+	            <div class="fixed-content-width">
+	                <div class="navbar-top-container">
+
+						
+<ul class="navbar-top-container-left">
+	<li class="navbar-top-menu d-lg-none">
+		<a class="navbar-top-item" href="javascript:toggleSubnav();" title="">
+			<div class="navbar-top-item-text navbar-top-item-icon navbar-top-item-text--last">
+				<i class="ui-icon ui-icon-menu" aria-hidden="true"></i>
+			</div>
+		</a>
+	</li>
+
+	
+	<li class="d-none d-lg-block">
+		<a class="navbar-top-item " href="javascript:toggleSubnav();">
+			<div class="navbar-top-item-text">Регистри</div>
+		</a>
+	</li>
+
+
+	<li>
+		<a class="navbar-top-item " href="/contacts" title="Контакти">
+			<div class="navbar-top-item-text navbar-top-item-icon">
+				<i class="ui-icon ui-icon-contacts-top d-inline-block d-lg-none mr-0" aria-hidden="true"></i><span class="d-none d-lg-inline">Контакти</span>
+			</div>
+		</a>
+	</li>
+
+		<li>
+		<a class="navbar-top-item" onclick="openWebHelp()" href="javascript:;" title="Помощ" nav_key="help">
+			<div class="navbar-top-item-text navbar-top-item-icon">
+				<i class="ui-icon ui-icon-help d-inline-block d-lg-none mr-0" aria-hidden="true"></i><span class="d-none d-lg-inline">Помощ</span>
+			</div>
+		</a>
+	</li>
+		<li class="dropdown position-static show" id="user_data">
+
+	
+		<a class="navbar-top-item" href="#" role="button" data-boundary="window" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+			<div class="navbar-top-item-text navbar-top-item-icon dropdown-toggle">
+				<i class="ui-icon ui-icon-user-top mr-0 mr-sm-2" aria-hidden="true"></i>
+				<span class="d-none d-sm-inline" nav_key="unauthenticated">Потребител</span>
+				<span class="navbar-top-text-limited d-none d-sm-inline-block" title="" nav_key="user_email" style="display: none;"></span>
+			</div>
+		</a>
+
+		<div class="dropdown-menu" aria-labelledby="dropdownMenuLink" nav_key="unauthenticated">
+			<a href="/login" class="dropdown-item" nav_key="login">Вход</a>
+			<a href="/register" class="dropdown-item">Регистрация</a>
+			<a href="/forgot-password" class="dropdown-item">Забравена парола</a>
+		</div>
+
+		<div class="dropdown-menu" aria-labelledby="dropdownMenuLink" nav_key="authenticated">
+			<span class="navbar-top-text-limited d-sm-none ml-4 mr-4" title="" nav_key="user_email"></span>
+			<div class="dropdown-divider d-sm-none"></div>
+			<a class="dropdown-item" href="/application-list">Моите заявления</a>
+			<a class="dropdown-item" href="/duty-list">Задължения и плащания</a>
+			<a class="dropdown-item" href="/personal-account-list">Управление на лични сметки</a>
+			<a class="dropdown-item" href="/payment-order-list">Справка банкови преводи</a>
+			<a class="dropdown-item" href="/forum">Форум</a>
+			<a class="dropdown-item" href="/email-subscription">Aбонамент за събития в регистри</a>
+
+			<a class="dropdown-item" href="/united-profile-list">Обединяване на потребителски профили</a>
+
+			<div class="dropdown-divider" nav_key="public_user"></div>
+			<a class="dropdown-item" href="/user-profile" nav_key="public_user">Потребителски профил</a>
+			<a class="dropdown-item" href="/user-auth-list" nav_key="public_user">Средства за автентикация</a>
+			<a class="dropdown-item" href="/change-password" nav_key="public_user">Смяна на парола</a>
+
+			<div class="dropdown-divider"></div>
+			<a class="dropdown-item" href="/logout" nav_key="logout">Изход</a>
+		</div>
+
+	
+	</li>
+</ul>
+	                    <ul class="navbar-top-container-right">
+
+							<li class="navbar-top-search">
+								<form method="get" name="searchform" action="/search" id="searchform">
+								<div class="navbar-top-item">
+									<div class="navbar-top-item-text navbar-top-item-icon">
+
+										<input type="text" name="sKey" class="form-control" maxlength="500" value="">										<a href="javascript://" title="Търси" onclick="$(this).closest('form').submit();">
+											<i class="ui-icon ui-icon-search-top" aria-hidden="true"></i>
+										</a>
+									</div>
+								</div>
+
+								</form>							</li>
+
+							<li class="dropdown position-static show">
+								<a class="navbar-top-item" href="#" role="button" data-boundary="window" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" title="Език">
+									<div class="navbar-top-item-text navbar-top-item-icon dropdown-toggle">
+										<i class="ui-icon ui-icon-globe-top" aria-hidden="true"></i>bg									</div>
+								</a>
+								<div class="dropdown-menu" aria-labelledby="dropdownMenuLink">
+									<div class="dropdown-menu--scrollable">
+																		</div>
+								</div>
+							</li>
+
+							<li class="navbar-top-font-size">
+								<div class="navbar-top-item">
+									<div class="navbar-top-item-text navbar-top-item-icon">
+										<a href="javascript:setFontSize(-1, 'registryagency.bg');" title="Намали шрифта"><i class="ui-icon ui-icon-font-size-minus" aria-hidden="true"></i></a><a href="javascript:setFontSize(0, 'registryagency.bg');" title="Нормален шрифт"><i class="ui-icon ui-icon-font-size" aria-hidden="true"></i></a><a href="javascript:setFontSize(1, 'registryagency.bg');" title="Увеличи шрифта"><i class="ui-icon ui-icon-font-size-plus" aria-hidden="true"></i></a>
+									</div>
+								</div>
+							</li>
+
+	                   	</ul>
+	                </div>
+	            </div>
+
+
+				<div class="navbar-top-subnav collapse">
+					<div class="fixed-content-width">
+						<div class="navbar-top-subnav-group">
+
+							
+								<div class="navbar-top-subnav-container">
+									<ul id="cr-navbar-top-subnav">
+										<li>
+											<a class="navbar-top-subnav-item " href="/home-cr">
+												<h3 class="navbar-top-subnav-title">Търговски регистър и регистър на ЮЛНЦ</h3>
+											</a>
+										</li>
+
+																					<li><a class="navbar-top-subnav-item" href="/CR/services" nav_key="cr_services">Електронни услуги</a></li>
+										
+
+																					<li><a class="navbar-top-subnav-item" href="/CR/applications" nav_key="cr_applications">Заявления</a></li>
+										
+										<li>
+											<a class="navbar-top-subnav-item " href="/legislation-cr">Нормативна уредба</a>
+										</li>
+
+										<li>
+											<a class="navbar-top-subnav-item " href="/document-template-cr">Образци на документи</a>
+										</li>
+
+																					<li><a class="navbar-top-subnav-item" href="/CR/reports" nav_key="cr_reports">Справки</a></li>
+										
+										<li>
+											<a class="navbar-top-subnav-item " href="/video-lesson-list-cr">Видео уроци</a>
+										</li>
+
+										
+										<li>
+											<a class="navbar-top-subnav-item " href="/statistic-cr">Статистики</a>
+										</li>
+									</ul>
+								</div>
+
+							
+								<div class="navbar-top-subnav-container">
+									<ul id="pr-navbar-top-subnav">
+										<li>
+											<a class="navbar-top-subnav-item " href="/home-pr">
+												<h3 class="navbar-top-subnav-title">Имотен регистър</h3>
+											</a>
+										</li>
+
+																					<li><a class="navbar-top-subnav-item" href="/PR/Services" nav_key="pr_services">Електронни услуги</a></li>
+										
+
+																					<li><a class="navbar-top-subnav-item" href="/PR/applications" nav_key="pr_applications">Заявления</a></li>
+										
+										<li>
+											<a class="navbar-top-subnav-item " href="/legislation-pr">Нормативна уредба</a>
+										</li>
+
+										<li>
+											<a class="navbar-top-subnav-item " href="/document-template-pr">Образци на документи</a>
+										</li>
+
+																					<li><a class="navbar-top-subnav-item" href="/PR/reports" nav_key="pr_reports">Справки</a></li>
+										
+										<li>
+											<a class="navbar-top-subnav-item " href="/video-lesson-list-pr">Видео уроци</a>
+										</li>
+
+																					<li><a class="navbar-top-subnav-item" href="/PR/TaxesCalculator" nav_key="pr_calculator">Калкулатор на държавни такси</a></li>
+										
+										<li>
+											<a class="navbar-top-subnav-item " href="/statistic-pr">Статистики</a>
+										</li>
+									</ul>
+								</div>
+
+							
+								<div class="navbar-top-subnav-container">
+									<ul id="croz-navbar-top-subnav">
+										<li>
+											<a class="navbar-top-subnav-item " href="/home-croz">
+												<h3 class="navbar-top-subnav-title">Централен регистър на особените залози</h3>
+											</a>
+										</li>
+
+																					<li><a class="navbar-top-subnav-item" href="/CROZ/services" nav_key="croz_services">Електронни услуги</a></li>
+										
+
+																					<li><a class="navbar-top-subnav-item" href="/CROZ/applications" nav_key="croz_applications">Заявления</a></li>
+										
+										<li>
+											<a class="navbar-top-subnav-item " href="/legislation-croz">Нормативна уредба</a>
+										</li>
+
+										<li>
+											<a class="navbar-top-subnav-item " href="/document-template-croz">Образци на документи</a>
+										</li>
+
+																					<li><a class="navbar-top-subnav-item" href="/CROZ/reports" nav_key="croz_reports">Справки</a></li>
+										
+										<li>
+											<a class="navbar-top-subnav-item " href="/video-lesson-list-croz">Видео уроци</a>
+										</li>
+
+										
+										<li>
+											<a class="navbar-top-subnav-item " href="/statistic-croz">Статистики</a>
+										</li>
+									</ul>
+								</div>
+
+							
+								<div class="navbar-top-subnav-container">
+									<ul id="rnfl-navbar-top-subnav">
+										<li>
+											<a class="navbar-top-subnav-item " href="/home-rnfl">
+												<h3 class="navbar-top-subnav-title">Регистър по несъстоятелност на физическите лица</h3>
+											</a>
+										</li>
+
+																					<li><a class="navbar-top-subnav-item" href="/RNFL/services" nav_key="rnfl_services">Електронни услуги</a></li>
+										
+
+																					<li><a class="navbar-top-subnav-item" href="/RNFL/applications" nav_key="rnfl_applications">Заявления</a></li>
+										
+										<li>
+											<a class="navbar-top-subnav-item " href="/legislation-rnfl">Нормативна уредба</a>
+										</li>
+
+										<li>
+											<a class="navbar-top-subnav-item " href="/document-template-rnfl">Образци на документи</a>
+										</li>
+
+																					<li><a class="navbar-top-subnav-item" href="/RNFL/reports" nav_key="rnfl_reports">Справки</a></li>
+										
+										<li>
+											<a class="navbar-top-subnav-item " href="/video-lesson-list-rnfl">Видео уроци</a>
+										</li>
+
+										
+										<li>
+											<a class="navbar-top-subnav-item " href="/statistic-rnfl">Статистики</a>
+										</li>
+									</ul>
+								</div>
+
+							
+                        </div>
+
+						<div class="navbar-top-subnav-close d-none d-lg-block">
+                            <button type="button" class="close" aria-label="Close" onclick="toggleSubnav()">
+                                <span aria-hidden="true">×</span>
+                            </button>
+                        </div>
+					</div>
+				</div>
+	        </nav>
+        </div>
+
+		<div class="content-wrapper" id="content-wrapper">
+					</div>
+
+		
+		<div class="footer-wrapper">
+	<footer class="footer">
+		<div class="brand-line brand-line--footer"></div>
+		 <div class="footer-links-container fixed-content-width">
+			<ul>
+								<li class="footer-link">
+					<a href="/test-signature">Тестово подписване</a>
+				</li>
+				
+				<li class="footer-link">
+					<a href="/bank-accounts">Банкови сметки</a>
+				</li>
+				<li class="footer-link">
+					<a href="/contacts">Контакти</a>
+				</li>
+			</ul>
+
+			<ul>
+				<li class="footer-link">
+					<a href="/terms-of-use">
+						Условия за ползване					</a>
+				</li>
+				<li class="footer-link">
+					<a href="/cookies">
+						Бисквитки					</a>
+				</li>
+
+								<li class="footer-link">
+					<a onclick="openWebHelp()" href="javascript:;" nav_key="help">
+						Помощ					</a>
+				</li>
+							</ul>
+
+			<ul>
+				<li class="footer-link">
+					<a href="/accessibility-policy">
+						Средства за автентикация					</a>
+				</li>
+				<li class="footer-link">
+					<a href="/security-policy">
+						Декларация за достъпност					</a>
+				</li>
+				<li class="footer-link">
+					<a href="/privacy-policy">
+						Политики за поверителност					</a>
+				</li>
+			</ul>
+
+			<ul>
+				<li class="footer-link"><a href="/bulletin-list">Бюлетин</a></li>
+				<li class="footer-link">
+					<a href="/links">
+						Връзки					</a>
+				</li>
+				<li class="footer-link"><a href="/site-map">Карта на сайта</a></li>
+			</ul>
+
+		</div>
+
+		<div class="section-wrapper">
+			<div class="fixed-content-width">
+			<div class="software-version">Версия: 0.9.2.29</div>
+			<hr class="footer-divider">
+			</div>
+		</div>
+
+		<div class="row footer-containter fixed-content-width">
+			<div class="col-sm-8 order-sm-2">
+				<p class="footer-text">Проектът за "Надграждане на Търговския регистър за интеграция с платформата за обмен на данни между Търговските регистри в ЕС, вграждане на регистъра на юридическите лица с нестопанска цел, интеграция с имотния регистър, единна входна точка и прехвърляне на централния регистър на особените залози" и проектът за "Надграждане на имотния регистър за интеграция с кадастралния регистър и предоставяне на допълнителни е-услуги" се осъществяват с финансовата подкрепа на Оперативна програма „Добро управление”, съфинансирана от Европейския съюз, чрез Европейския социален фонд.</p>
+			</div>
+			<div class="col-6 col-sm-2 order-sm-1 text-center text-sm-left">
+				<img class="" src="/images/footer-logo-eu.svg">
+			</div>
+			<div class="col-6 col-sm-2 order-sm-3 text-center text-sm-right">
+				<img class="" src="/images/footer-logo-opdu.svg">
+			</div>
+		</div>
+	</footer>
+</div>
+
+	</div>
+	
+	
+	<div id="scrollToTopLabel" style="display:none;">Към началото на страницата</div>
+
+	<aside id="cookieInfo" class="cookie-info d-none">
+		<div class="fixed-content-width">
+			<p>Този сайт използва "бисквитки" с цел по-добро обслужване на своите посетители. За повече информация, моля да се запознаете с пълната информация за <a href="/cookies" class="text-white"><b>Бисквитки</b></a>.</p>
+			<div class="button-bar">
+				<div class="left-side">
+				</div>
+				<div class="right-side">
+					<button type="button" onclick="setCookiePrivacyAccept('registryagency.bg');" class="btn btn-outline-light text-info">Приеми</button>
+				</div>
+			</div>
+		</div>
+	</aside>
+
+    
+
+
+
+    <script src="/CR/dist/vendor.js?v=KOjAHqXmSyhDZ9XLeU5MXnz8J79F4WudBllGV5C8he0"></script></body></html>
