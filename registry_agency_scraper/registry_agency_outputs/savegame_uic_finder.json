@@ -1,15 +1,15 @@
 {
-  "query_idx": 101541,
-  "query": "РЪ40",
+  "query_idx": 102952,
+  "query": "СИ51",
   "page_num": 0,
   "status": "atexit",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-09-22T14:40:23.231733",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A0%D0%AA40&selectedSearchFilter=1",
-  "total_uics": 564418,
-  "last_new_uics": 0,
-  "elapsed_seconds": 19214,
+  "last_activity": "2026-09-22T20:03:55.834636",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A1%D0%9851&selectedSearchFilter=1",
+  "total_uics": 564429,
+  "last_new_uics": 1,
+  "elapsed_seconds": 19206,
   "error": null,
-  "saved_at": "2026-09-22T14:40:23.231740",
+  "saved_at": "2026-09-22T20:03:55.834642",
   "save_reason": "atexit"
 }
