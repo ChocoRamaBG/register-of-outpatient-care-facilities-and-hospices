@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-09-22T03:53:23.201419",
+  "timestamp": "2026-09-22T09:16:45.078460",
   "elapsed_seconds": 19200,
-  "query_idx": 98981,
-  "query": "РА81",
+  "query_idx": 100132,
+  "query": "РМ32",
   "page_num": 0,
   "status": "goto",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A0%D0%9081&selectedSearchFilter=1",
-  "total_uics": 564412,
-  "last_new_uics": 0
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A0%D0%9C32&selectedSearchFilter=1",
+  "total_uics": 564417,
+  "last_new_uics": 1
 }
