@@ -1,15 +1,15 @@
 {
-  "query_idx": 97739,
-  "query": "ПФ38",
+  "query_idx": 98982,
+  "query": "РА81",
   "page_num": 0,
   "status": "atexit",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-09-21T22:30:06.933971",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%9F%D0%A438&selectedSearchFilter=1",
-  "total_uics": 564411,
-  "last_new_uics": 1,
-  "elapsed_seconds": 19206,
+  "last_activity": "2026-09-22T03:53:28.537613",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A0%D0%9081&selectedSearchFilter=1",
+  "total_uics": 564412,
+  "last_new_uics": 0,
+  "elapsed_seconds": 19205,
   "error": null,
-  "saved_at": "2026-09-21T22:30:06.933977",
+  "saved_at": "2026-09-22T03:53:28.537620",
   "save_reason": "atexit"
 }
