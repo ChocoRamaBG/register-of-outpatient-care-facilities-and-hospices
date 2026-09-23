@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-09-22T20:03:49.643401",
+  "timestamp": "2026-09-23T01:27:46.152436",
   "elapsed_seconds": 19200,
-  "query_idx": 102951,
-  "query": "СИ51",
+  "query_idx": 104373,
+  "query": "СЦ73",
   "page_num": 0,
   "status": "goto",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A1%D0%9851&selectedSearchFilter=1",
-  "total_uics": 564429,
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A1%D0%A673&selectedSearchFilter=1",
+  "total_uics": 564448,
   "last_new_uics": 1
 }
