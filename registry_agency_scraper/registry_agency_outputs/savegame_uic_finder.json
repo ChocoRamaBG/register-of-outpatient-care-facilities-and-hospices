@@ -1,15 +1,15 @@
 {
-  "query_idx": 115041,
-  "query": "ХБ40",
+  "query_idx": 115658,
+  "query": "ХЗ58",
   "page_num": 0,
-  "status": "atexit",
+  "status": "starting_query",
   "started_at": "2026-08-25T07:07:14.915281",
-  "last_activity": "2026-09-24T20:42:35.989520",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A5%D0%9140&selectedSearchFilter=1",
-  "total_uics": 564460,
+  "last_activity": "2026-09-24T23:25:14.407987",
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A5%D0%9757&selectedSearchFilter=1",
+  "total_uics": 564461,
   "last_new_uics": 1,
-  "elapsed_seconds": 19217,
+  "elapsed_seconds": 9530,
   "error": null,
-  "saved_at": "2026-09-24T20:42:35.989525",
-  "save_reason": "atexit"
+  "saved_at": "2026-09-24T23:25:14.407993",
+  "save_reason": "query_start"
 }
