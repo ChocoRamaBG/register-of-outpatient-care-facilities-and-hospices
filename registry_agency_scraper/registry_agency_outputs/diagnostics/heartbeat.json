@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-09-24T04:31:04.082481",
+  "timestamp": "2026-09-24T09:54:33.024677",
   "elapsed_seconds": 19200,
-  "query_idx": 110794,
-  "query": "УЦ94",
+  "query_idx": 112206,
+  "query": "ФЕ06",
   "page_num": 0,
   "status": "goto",
-  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A3%D0%A694&selectedSearchFilter=1",
-  "total_uics": 564458,
+  "last_url": "https://portal.registryagency.bg/CR/Reports/VerificationPersonOrg?name=%D0%A4%D0%9506&selectedSearchFilter=1",
+  "total_uics": 564460,
   "last_new_uics": 1
 }
