@@ -3,6 +3,7 @@ import pandas as pd
 import os
 import re
 import sys
+import traceback
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
@@ -17,7 +18,6 @@ try:
 except NameError:
     SCRIPT_DIR = os.getcwd()
 
-# Създаваме отделна директория за този конкретен парсер
 OUTPUT_DIR = os.path.join(SCRIPT_DIR, "blsbg_outputs")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -33,6 +33,13 @@ def clean_text(text):
     if not isinstance(text, str):
         return text
     return re.sub(r'[\x00-\x1F\x7F]+', '', text).strip()
+
+def clean_attribute(text):
+    if not isinstance(text, str):
+        return "-"
+    # Clean control characters and fix the escaped quotes (\")
+    cleaned = re.sub(r'[\x00-\x1F\x7F]+', '', text).strip()
+    return cleaned.replace('\\"', '"')
 
 def get_processed_pages():
     if not os.path.exists(PROCESSED_LOG_FILE):
@@ -161,10 +168,16 @@ def main_loop():
                 if "404" in driver.title or "Page not found" in driver.page_source:
                     print(f"  [INFO] Region {region_code} returned 404 Not Found.")
                     break
+                
+                try:
+                    region_name_element = driver.find_element(By.CSS_SELECTOR, "h2.light.bordered")
+                    region_name = region_name_element.text.replace("Списък с членове - РК на БЛС -", "").strip()
+                except NoSuchElementException:
+                    region_name = f"Region {region_code}"
 
                 try:
                     rows = WebDriverWait(driver, 30).until(
-                        EC.presence_of_all_elements_located((By.XPATH, "//table//tr[td]"))
+                        EC.presence_of_all_elements_located((By.XPATH, "//table[contains(@class, 'items')]/tbody/tr"))
                     )
                     page_loaded = True
                 except TimeoutException:
@@ -197,7 +210,7 @@ def main_loop():
                 )
                 summary_text = clean_text(summary_element.text)
                 
-                match = re.search(r'-(\d+)\s+от\s+(\d+)', summary_text)
+                match = re.search(r'(\d+)\s+от\s+(\d+)', summary_text)
                 if match:
                     current_end = int(match.group(1))
                     total_records = int(match.group(2))
@@ -212,18 +225,21 @@ def main_loop():
 
             valid_records_this_page = 0
 
-            for row in rows:
+            for row_index, row in enumerate(rows):
                 try:
+                    if "empty" in row.get_attribute("class") or "Няма намерени" in row.text:
+                        continue
+
                     uin = get_text_safe(row, "./td[1]")
                     if uin == "-": continue 
                     
                     try:
                         img = row.find_element(By.CSS_SELECTOR, "img.expand")
-                        adr = get_attr_safe(img, "adr")
-                        gadr = get_attr_safe(img, "gadr")
-                        tel = get_attr_safe(img, "tel")
-                        wrk = get_attr_safe(img, "wrk")
-                        spec_attr = get_attr_safe(img, "spec")
+                        adr = clean_attribute(img.get_attribute("adr"))
+                        gadr = clean_attribute(img.get_attribute("gadr"))
+                        tel = clean_attribute(img.get_attribute("tel"))
+                        wrk = clean_attribute(img.get_attribute("wrk"))
+                        spec_attr = clean_attribute(img.get_attribute("spec"))
                     except NoSuchElementException:
                         adr = gadr = tel = wrk = spec_attr = "-"
 
@@ -232,12 +248,13 @@ def main_loop():
 
                     data_row = {
                         "Region Code": clean_text(region_code),
+                        "Region Name": clean_text(region_name),
                         "UIN": clean_text(uin),
-                        "Address (Hidden)": clean_text(adr),
-                        "G Address (Hidden)": clean_text(gadr),
-                        "Phone": clean_text(tel),
-                        "Workplace": clean_text(wrk), 
-                        "Specialty (Hidden)": clean_text(spec_attr),
+                        "Address (Hidden)": adr,
+                        "G Address (Hidden)": gadr,
+                        "Phone": tel,
+                        "Workplace": wrk, 
+                        "Specialty (Hidden)": spec_attr,
                         "Name": clean_text(name),
                         "Specialty (Visible)": clean_text(spec_text),
                         "Source URL": target_url,
@@ -245,7 +262,9 @@ def main_loop():
                     }
                     all_data.append(data_row)
                     valid_records_this_page += 1
-                except Exception:
+                
+                except Exception as e:
+                    print(f"    [ERROR] Failed to parse row {row_index} on page {page_num}: {e}")
                     continue
             
             save_processed_page(region_code, page_num)
