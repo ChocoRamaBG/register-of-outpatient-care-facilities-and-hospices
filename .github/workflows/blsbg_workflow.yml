@@ -28,8 +28,6 @@ jobs:
           python-version: '3.10'
 
       - name: Install Dependencies
-        # Ако имаш requirements.txt в папката blsbg_scraper, използвай: pip install -r requirements.txt
-        # В противен случай си инсталирай нужните библиотеки ръчно:
         run: |
           python -m pip install --upgrade pip
           pip install pandas selenium webdriver-manager openpyxl
@@ -54,10 +52,10 @@ jobs:
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           
-          # Създаваме директорията и лог файла превантивно
+          # Създаваме директорията и лог файла превантивно (с новото име за UIN кодове)
           mkdir -p blsbg_outputs
-          touch blsbg_outputs/processed_blsbg_pages.txt
-          git add blsbg_outputs/processed_blsbg_pages.txt
+          touch blsbg_outputs/processed_blsbg_uin_codes.txt
+          git add blsbg_outputs/processed_blsbg_uin_codes.txt
           
           if [ -f "blsbg_outputs/bg_medics_dynamic_2029.xlsx" ]; then
             git add blsbg_outputs/bg_medics_dynamic_2029.xlsx
@@ -66,7 +64,7 @@ jobs:
           if git diff --staged --quiet; then
             echo "No new changes to commit."
           else
-            git commit -m "Auto-save state: Update BLS BG processed pages and extracted medical data"
+            git commit -m "Auto-save state: Update BLS BG UIN codes tracker and extracted medical data"
             git push
           fi
 
