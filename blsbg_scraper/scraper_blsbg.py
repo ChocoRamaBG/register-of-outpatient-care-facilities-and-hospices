@@ -3,7 +3,6 @@ import pandas as pd
 import os
 import re
 import sys
-import traceback
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
@@ -21,7 +20,7 @@ except NameError:
 OUTPUT_DIR = os.path.join(SCRIPT_DIR, "blsbg_outputs")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-PROCESSED_LOG_FILE = os.path.join(OUTPUT_DIR, "processed_blsbg_pages.txt")
+PROCESSED_UIN_FILE = os.path.join(OUTPUT_DIR, "processed_blsbg_uin_codes.txt")
 CONTINUE_FLAG_FILE = os.path.join(OUTPUT_DIR, "CONTINUE_FLAG_BLSBG")
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, "bg_medics_dynamic_2029.xlsx")
 
@@ -37,25 +36,26 @@ def clean_text(text):
 def clean_attribute(text):
     if not isinstance(text, str):
         return "-"
-    # Clean control characters and fix the escaped quotes (\")
     cleaned = re.sub(r'[\x00-\x1F\x7F]+', '', text).strip()
     return cleaned.replace('\\"', '"')
 
-def get_processed_pages():
-    if not os.path.exists(PROCESSED_LOG_FILE):
+def get_processed_uins():
+    if not os.path.exists(PROCESSED_UIN_FILE):
         return set()
-    with open(PROCESSED_LOG_FILE, 'r', encoding='utf-8') as f:
+    with open(PROCESSED_UIN_FILE, 'r', encoding='utf-8') as f:
         return set(line.strip() for line in f if line.strip())
 
-def save_processed_page(region_code, page_num):
-    with open(PROCESSED_LOG_FILE, 'a', encoding='utf-8') as f:
-        f.write(f"{region_code}_{page_num}\n")
+def save_processed_uin(uin):
+    with open(PROCESSED_UIN_FILE, 'a', encoding='utf-8') as f:
+        f.write(f"{uin}\n")
 
 def save_to_excel(data, filepath):
     if not data: 
         return
     try:
         df = pd.DataFrame(data)
+        if 'UIN' in df.columns:
+            df = df.drop_duplicates(subset=['UIN'], keep='last')
         df.to_excel(filepath, index=False)
     except Exception as e:
         print(f"  [ERROR] I/O Exception during file save: {e}")
@@ -67,16 +67,9 @@ def get_text_safe(element, xpath):
     except:
         return "-"
 
-def get_attr_safe(element, attr):
-    try:
-        val = element.get_attribute(attr)
-        return val if val else "-"
-    except:
-        return "-"
-
 # --- CORE PIPELINE ---
 def main_loop():
-    print("[INFO] Initializing data extraction pipeline with latency handling...")
+    print("[INFO] Initializing UIN-based data extraction pipeline...")
 
     if os.path.exists(CONTINUE_FLAG_FILE):
         os.remove(CONTINUE_FLAG_FILE)
@@ -92,13 +85,12 @@ def main_loop():
         except Exception as e:
             print(f"[WARN] Failed to parse existing file. Starting with empty dataset. Error: {e}")
 
-    processed_pages = get_processed_pages()
-    print(f"[INFO] Index loaded: {len(processed_pages)} pages previously processed.")
+    processed_uins = get_processed_uins()
+    print(f"[INFO] Index loaded: {len(processed_uins)} unique UINs previously processed.")
 
     print("[INFO] Configuring WebDriver instance...")
     options = webdriver.ChromeOptions()
     options.page_load_strategy = 'eager'
-    
     options.add_argument('--headless=new') 
     options.add_argument('--no-sandbox') 
     options.add_argument('--disable-dev-shm-usage') 
@@ -109,7 +101,6 @@ def main_loop():
     options.add_argument('--disable-backgrounding-occluded-windows')
     options.add_argument('--disable-renderer-backgrounding')
     options.add_argument('--disable-background-timer-throttling')
-    options.add_argument('--disable-popup-blocking') 
     options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36')
 
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
@@ -124,18 +115,11 @@ def main_loop():
         print(f"========================================")
         
         while True:
-            page_id = f"{region_code}_{page_num}"
-            
-            if page_id in processed_pages:
-                page_num += 1
-                continue
-
             elapsed = time.time() - START_TIME
             if elapsed > MAX_RUNTIME_SECONDS:
                 print("\n[WARN] Execution runtime limit approaching. Initiating graceful shutdown...")
                 with open(CONTINUE_FLAG_FILE, 'w') as f:
                     f.write("CONTINUE_REQUIRED")
-                
                 save_to_excel(all_data, OUTPUT_FILE)
                 driver.quit()
                 sys.exit(0)
@@ -154,8 +138,6 @@ def main_loop():
                     save_to_excel(all_data, OUTPUT_FILE)
                     driver.quit()
                     sys.exit(0)
-
-                print(f"  > Fetching Region {region_code} | Page {page_num}...")
                 
                 try:
                     driver.get(target_url)
@@ -166,9 +148,8 @@ def main_loop():
                     continue
 
                 if "404" in driver.title or "Page not found" in driver.page_source:
-                    print(f"  [INFO] Region {region_code} returned 404 Not Found.")
                     break
-                
+
                 try:
                     region_name_element = driver.find_element(By.CSS_SELECTOR, "h2.light.bordered")
                     region_name = region_name_element.text.replace("Списък с членове - РК на БЛС -", "").strip()
@@ -182,7 +163,6 @@ def main_loop():
                     page_loaded = True
                 except TimeoutException:
                     if "Няма намерени" in driver.page_source:
-                        print(f"  [INFO] No further records available for Region {region_code}.")
                         page_loaded = True
                         rows = []
                     else:
@@ -197,7 +177,6 @@ def main_loop():
             
             current_first_row_data = get_text_safe(rows[0], "./td[1]")
             if current_first_row_data == last_first_row_data and current_first_row_data != "-":
-                print(f"  [WARN] Pagination index duplication detected on page {page_num}. Terminating region collection.")
                 break
             last_first_row_data = current_first_row_data
 
@@ -214,16 +193,13 @@ def main_loop():
                 if match:
                     current_end = int(match.group(1))
                     total_records = int(match.group(2))
-                    
-                    percentage = (current_end / total_records) * 100
-                    print(f"    [INFO] Progress: {percentage:.2f}% ({current_end}/{total_records})")
-                    
                     if current_end >= total_records:
                         is_last_page = True
             except TimeoutException:
-                print("    [WARN] Summary element missing. Relying on duplication protection protocol.")
+                pass
 
             valid_records_this_page = 0
+            new_records_this_page = 0
 
             for row_index, row in enumerate(rows):
                 try:
@@ -232,6 +208,11 @@ def main_loop():
 
                     uin = get_text_safe(row, "./td[1]")
                     if uin == "-": continue 
+                    
+                    valid_records_this_page += 1
+
+                    if uin in processed_uins:
+                        continue 
                     
                     try:
                         img = row.find_element(By.CSS_SELECTOR, "img.expand")
@@ -261,17 +242,22 @@ def main_loop():
                         "Summary Info": summary_text
                     }
                     all_data.append(data_row)
-                    valid_records_this_page += 1
+                    new_records_this_page += 1
+                    
+                    processed_uins.add(uin)
+                    save_processed_uin(uin)
                 
                 except Exception as e:
                     print(f"    [ERROR] Failed to parse row {row_index} on page {page_num}: {e}")
                     continue
             
-            save_processed_page(region_code, page_num)
-            save_to_excel(all_data, OUTPUT_FILE)
+            if new_records_this_page > 0:
+                print(f"  [INFO] Extracted {new_records_this_page} NEW records on page {page_num}.")
+                save_to_excel(all_data, OUTPUT_FILE)
+            else:
+                print(f"  [INFO] Page {page_num} checked. No new records found.")
 
             if valid_records_this_page == 0:
-                print(f"  [INFO] No valid records extracted. Concluding region.")
                 break
 
             if is_last_page:
