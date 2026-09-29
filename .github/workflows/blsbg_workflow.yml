@@ -65,6 +65,7 @@ jobs:
             echo "No new changes to commit."
           else
             git commit -m "Auto-save state: Update BLS BG UIN codes tracker and extracted medical data"
+            git pull origin main --rebase
             git push
           fi
 
@@ -84,7 +85,7 @@ jobs:
 
           if [ -f "blsbg_outputs/CONTINUE_FLAG_BLSBG" ]; then
             echo "Continue flag detected. Script hit time limit. Triggering next workflow run..."
-            gh workflow run "Autonomous BLS BG Archive Scraper"
+            gh workflow run "(blsbg.eu) Autonomous BLS BG Archive Scraper"
           else
             echo "No continue flag detected. BLS BG scraping is 100% complete."
           fi
