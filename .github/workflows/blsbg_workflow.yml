@@ -33,7 +33,7 @@ jobs:
           pip install pandas selenium webdriver-manager openpyxl
 
       - name: Execute Autonomous BLS BG Deep Scrape
-        run: python scraper_blsbg.py
+        run: python -u scraper_blsbg.py
 
       - name: Upload Debug Artifacts
         if: always()
