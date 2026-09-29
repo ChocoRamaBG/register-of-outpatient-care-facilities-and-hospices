@@ -75,6 +75,9 @@ def main_loop():
         os.remove(CONTINUE_FLAG_FILE)
 
     all_data = []
+    
+    # 1. Зареждаме съществуващите кодове от текстовия файл
+    processed_uins = get_processed_uins()
 
     if os.path.exists(OUTPUT_FILE):
         print("[INFO] Locating existing dataset...")
@@ -82,11 +85,23 @@ def main_loop():
             df_existing = pd.read_excel(OUTPUT_FILE).fillna("-")
             all_data = df_existing.to_dict('records')
             print(f"[INFO] Successfully loaded {len(all_data)} records from prior sessions.")
+            
+            # 2. Автоматично извличане на UIN от Excel файла и запис в текстовия файл
+            extracted_count = 0
+            for row in all_data:
+                existing_uin = str(row.get("UIN", "")).strip()
+                if existing_uin and existing_uin != "-" and existing_uin not in processed_uins:
+                    processed_uins.add(existing_uin)
+                    save_processed_uin(existing_uin)
+                    extracted_count += 1
+            
+            if extracted_count > 0:
+                print(f"[INFO] Auto-populated {extracted_count} missing UINs from Excel to the tracking file.")
+                
         except Exception as e:
             print(f"[WARN] Failed to parse existing file. Starting with empty dataset. Error: {e}")
 
-    processed_uins = get_processed_uins()
-    print(f"[INFO] Index loaded: {len(processed_uins)} unique UINs previously processed.")
+    print(f"[INFO] Index loaded: {len(processed_uins)} unique UINs ready for deduplication.")
 
     print("[INFO] Configuring WebDriver instance...")
     options = webdriver.ChromeOptions()
@@ -211,6 +226,7 @@ def main_loop():
                     
                     valid_records_this_page += 1
 
+                    # 3. Проверява паметта (сета) на секундата - ако го има, скипва директно
                     if uin in processed_uins:
                         continue 
                     
@@ -244,6 +260,7 @@ def main_loop():
                     all_data.append(data_row)
                     new_records_this_page += 1
                     
+                    # 4. Записва новия доктор веднага в паметта и файла
                     processed_uins.add(uin)
                     save_processed_uin(uin)
                 
