@@ -74,7 +74,7 @@ if os.path.exists(state_file):
         with open(state_file, "r", encoding="utf-8") as f:
             loaded_state = json.load(f)
             state.update(loaded_state)
-        print(f"[INFO] Възстановяване на сесията: Страница {state['page']}.")
+        print(f"[INFO] Заредено състояние: Страница {state['page']}.")
     except Exception as e:
         print(f"[WARN] Грешка при зареждане на състоянието: {e}")
 
@@ -194,7 +194,6 @@ def decline_cookies():
 def extract_doctor_details(url):
     try:
         driver_page.goto(url, wait_until="domcontentloaded")
-        # Изчакване на основния профилен компонент да се рендерира
         driver_page.wait_for_selector("profile-main-section", timeout=15000)
     except Exception as e:
         print(f"[ERROR] Грешка при зареждане на {url}: {e}")
@@ -209,47 +208,38 @@ def extract_doctor_details(url):
     }
 
     try:
-        # Име
         name_loc = driver_page.locator(".personal-information h1 span").first
         if name_loc.count() > 0:
             details["Name"] = name_loc.inner_text().strip()
 
-        # Основна специалност
         spec_loc = driver_page.locator(".personal-information .fs-16.fw-semibold").first
         if spec_loc.count() > 0:
             details["Specialty"] = spec_loc.inner_text().strip()
 
-        # Други специалности
         other_spec_loc = driver_page.locator(".personal-information .other-specialties").first
         if other_spec_loc.count() > 0:
             details["Other_Specialties"] = other_spec_loc.inner_text().strip()
 
-        # Адрес (обикновено се намира под университета/лечебното заведение)
         addr_loc = driver_page.locator(".personal-information .fs-14.fw-normal.text-gray-500").first
         if addr_loc.count() > 0:
             details["Address"] = addr_loc.inner_text().strip()
 
-        # Месторабота (Работно място)
         workplaces = driver_page.locator("experience .link").all_inner_texts()
         if workplaces:
             details["Workplace"] = " | ".join([w.strip() for w in workplaces if w.strip()])
 
-        # Образование
         education = driver_page.locator("education .fs-16").all_inner_texts()
         if education:
             details["Education"] = " | ".join([e.strip() for e in education if e.strip()])
 
-        # Имейл
         email_loc = driver_page.locator("a[href^='mailto:']").first
         if email_loc.count() > 0:
             details["Email"] = email_loc.inner_text().strip()
 
-        # Телефон
         phone_loc = driver_page.locator("a[href^='tel:']").first
         if phone_loc.count() > 0:
             details["Phone"] = phone_loc.inner_text().strip()
 
-        # CV / Биография
         cv_loc = driver_page.locator("cv-description").first
         if cv_loc.count() > 0:
             details["CV_Bio"] = cv_loc.inner_text().strip().replace('\n', '  ')
@@ -266,13 +256,25 @@ def flag_for_continuation():
     with open(CONTINUE_FLAG_FILE, 'w') as f:
         f.write("CONTINUE")
 
-def clear_continuation_flag():
+def check_and_clear_continuation_flag():
     if os.path.exists(CONTINUE_FLAG_FILE):
         os.remove(CONTINUE_FLAG_FILE)
+        return True
+    return False
 
 def main():
     global driver_page
-    clear_continuation_flag()
+    is_continuation = check_and_clear_continuation_flag()
+
+    # Ако скриптът стартира без флага, значи е ново обхождане по график.
+    # Нулираме състоянието, за да обходим всички страници и да намерим нови профили.
+    if not is_continuation:
+        print("[INFO] Ново стартиране (не е продължение). Започва сканиране от страница 1.")
+        state["page"] = 1
+        state["finished"] = False
+        state["previous_first_doc"] = None
+        state["consecutive_fails"] = 0
+        save_state()
 
     if state.get("finished", False):
         print("[INFO] Скрейпингът е вече маркиран като завършен.")
@@ -292,13 +294,12 @@ def main():
         try:
             driver_page.goto(current_url, wait_until="domcontentloaded")
             decline_cookies()
-            # Изчакване на резултатите да се заредят
             driver_page.wait_for_selector(".search-result", timeout=15000)
         except Exception as e:
             print(f"[WARN] Грешка при зареждане на страница {page}: {e}")
             state["consecutive_fails"] += 1
             if state["consecutive_fails"] >= MAX_PAGE_RETRIES:
-                print(f"[ERROR] Достигнат лимит за грешки на стр. {page}. Маркиране като завършен.")
+                print(f"[ERROR] Достигнат лимит за грешки на стр. {page}. Край на обхождането.")
                 state["finished"] = True
             save_state()
             driver_page = restart_driver()
@@ -306,7 +307,6 @@ def main():
 
         state["consecutive_fails"] = 0
 
-        # Извличане на линкове към профилите
         doc_links = driver_page.locator(".search-result a.search-list-title").all()
         doctor_urls = []
         for el in doc_links:
@@ -316,14 +316,13 @@ def main():
                 doctor_urls.append(full_url)
 
         if not doctor_urls:
-            print("[INFO] Няма повече профили намерени на тази страница. Край на пагинацията.")
+            print("[INFO] Няма намерени профили. Край на пагинацията.")
             state["finished"] = True
             save_state()
             break
 
-        # Проверка за повтаряща се пагинация (защитен механизъм)
         if state["previous_first_doc"] == doctor_urls[0]:
-            print("[WARN] Засечено повторение на резултатите (вероятно край на пагинацията).")
+            print("[WARN] Засечено повторение на резултатите (край на пагинацията).")
             state["finished"] = True
             save_state()
             break
