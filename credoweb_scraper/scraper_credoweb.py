@@ -11,16 +11,39 @@ from playwright.sync_api import (
 )
 
 # ============================================================
-# КОНФИГУРАЦИЯ
+# КОНФИГУРАЦИЯ И ЦЕЛИ (TARGETS)
 # ============================================================
 START_TIME = time.time()
 TIME_LIMIT_SECONDS = 5.4 * 60 * 60  # ~5 часа и 24 минути
 
-BASE_URL = "https://www.credoweb.bg/search?cat=101"
 BASE_DOMAIN = "https://www.credoweb.bg"
 
 MAX_PAGE_RETRIES = 3
 RETRY_DELAY_SECONDS = 2
+
+TARGETS = [
+    {
+        "cat": "101",
+        "name": "doctors",
+        "url": "https://www.credoweb.bg/search?cat=101",
+        "csv": "credoweb_doctors_full.csv",
+        "fields": [
+            "Name", "Profession_Tags", "Specialty", "Other_Specialties", 
+            "Address", "Workplace", "Education", "Organizations",
+            "Phone", "Email", "Followers", "Following", "CV_Bio", "Source_URL"
+        ]
+    },
+    {
+        "cat": "103",
+        "name": "hospitals",
+        "url": "https://www.credoweb.bg/search?cat=103",
+        "csv": "credoweb_hospitals_full.csv",
+        "fields": [
+            "Name", "Type", "Address", "Website", "Phone", "Email", 
+            "Followers", "Following", "About", "Structures", "Team", "Source_URL"
+        ]
+    }
+]
 
 # ============================================================
 # ПЪТИЩА И ДИРЕКТОРИИ
@@ -37,22 +60,15 @@ state_file = os.path.join(output_dir, "savegame_credoweb.json")
 memory_file = os.path.join(output_dir, "parsed_urls_credoweb.txt")
 failed_pages_file = os.path.join(output_dir, "failed_pages_credoweb.json")
 failed_profiles_file = os.path.join(output_dir, "failed_profiles_credoweb.json")
-csv_file_path = os.path.join(output_dir, "credoweb_doctors_full.csv")
 CONTINUE_FLAG_FILE = os.path.join(output_dir, "CONTINUE_FLAG_CREDOWEB")
 
-# ============================================================
-# СХЕМА ЗА ЗАПИС НА ДАННИ (CSV)
-# ============================================================
-fieldnames = [
-    "Name", "Profession_Tags", "Specialty", "Other_Specialties", 
-    "Address", "Workplace", "Education", "Organizations",
-    "Phone", "Email", "Followers", "Following", "CV_Bio", "Source_URL"
-]
-
-if not os.path.exists(csv_file_path):
-    with open(csv_file_path, mode="w", encoding="utf-8-sig", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
+# Инициализиране на CSV файловете, ако не съществуват
+for t in TARGETS:
+    csv_path = os.path.join(output_dir, t["csv"])
+    if not os.path.exists(csv_path):
+        with open(csv_path, mode="w", encoding="utf-8-sig", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=t["fields"])
+            writer.writeheader()
 
 # ============================================================
 # УПРАВЛЕНИЕ НА ВРЕМЕТО
@@ -64,18 +80,25 @@ def time_limit_reached():
 # УПРАВЛЕНИЕ НА СЪСТОЯНИЕТО (STATE)
 # ============================================================
 state = {
-    "page": 1,
-    "consecutive_fails": 0,
-    "previous_first_doc": None,
-    "finished": False
+    "101": {"page": 1, "finished": False, "previous_first_doc": None},
+    "103": {"page": 1, "finished": False, "previous_first_doc": None},
+    "consecutive_fails": 0
 }
 
 if os.path.exists(state_file):
     try:
         with open(state_file, "r", encoding="utf-8") as f:
             loaded_state = json.load(f)
-            state.update(loaded_state)
-        print(f"[INFO] Заредено състояние: Страница {state['page']}.")
+            # Миграция от стария формат към новия
+            if "101" not in loaded_state:
+                state["101"]["page"] = loaded_state.get("page", 1)
+                state["101"]["finished"] = loaded_state.get("finished", False)
+                state["101"]["previous_first_doc"] = loaded_state.get("previous_first_doc", None)
+                state["consecutive_fails"] = loaded_state.get("consecutive_fails", 0)
+                print(f"[INFO] Успешна миграция на state файла към multi-target формат.")
+            else:
+                state.update(loaded_state)
+        print(f"[INFO] Заредено състояние. Лекари стр: {state['101']['page']}, Болници стр: {state['103']['page']}.")
     except Exception as e:
         print(f"[WARN] Грешка при зареждане на състоянието: {e}")
 
@@ -112,7 +135,7 @@ def mark_as_parsed(url):
 # ============================================================
 # ЛОГОВЕ ЗА ГРЕШКИ
 # ============================================================
-def add_failed_profile(url, page, error_msg=""):
+def add_failed_profile(url, cat, page, error_msg=""):
     profiles = []
     if os.path.exists(failed_profiles_file):
         try:
@@ -122,6 +145,7 @@ def add_failed_profile(url, page, error_msg=""):
             pass
     profiles.append({
         "URL": unquote(url),
+        "Category": cat,
         "Page": page,
         "Error": str(error_msg),
         "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -179,9 +203,6 @@ def close_driver():
 
 driver_page = create_driver()
 
-# ============================================================
-# ПОМОЩНИ ФУНКЦИИ
-# ============================================================
 def decline_cookies():
     try:
         driver_page.locator("cookie-policy-popup button:has-text('Приемам')").first.click(timeout=3000)
@@ -189,18 +210,10 @@ def decline_cookies():
         pass
 
 # ============================================================
-# ЕКСТРАКЦИЯ НА ПРОФИЛ
+# ЕКСТРАКЦИЯ СПОРЕД КАТЕГОРИЯТА
 # ============================================================
-def extract_doctor_details(url):
-    try:
-        driver_page.goto(url, wait_until="domcontentloaded")
-        driver_page.wait_for_selector("profile-main-section", timeout=15000)
-    except Exception as e:
-        print(f"[ERROR] Грешка при зареждане на {url}: {e}")
-        return None
-
+def extract_doctor(url):
     decoded_url = unquote(url)
-    
     details = {
         "Name": "", "Profession_Tags": "", "Specialty": "", "Other_Specialties": "", 
         "Address": "", "Workplace": "", "Education": "", "Organizations": "",
@@ -209,78 +222,104 @@ def extract_doctor_details(url):
     }
 
     try:
-        # Име
         name_loc = driver_page.locator(".personal-information h1 span").first
-        if name_loc.count() > 0:
-            details["Name"] = name_loc.inner_text().strip()
+        if name_loc.count() > 0: details["Name"] = name_loc.inner_text().strip()
             
-        # Професионални тагове (пр. "Лекар", "Само за специалисти")
         prof_tags = driver_page.locator(".personal-information cw-tags a span").all_inner_texts()
-        if prof_tags:
-             details["Profession_Tags"] = ", ".join([t.strip() for t in prof_tags if t.strip()])
+        if prof_tags: details["Profession_Tags"] = ", ".join([t.strip() for t in prof_tags if t.strip()])
 
-        # Основна специалност
         spec_loc = driver_page.locator(".personal-information .fs-16.fw-semibold").first
-        if spec_loc.count() > 0:
-            details["Specialty"] = spec_loc.inner_text().strip()
+        if spec_loc.count() > 0: details["Specialty"] = spec_loc.inner_text().strip()
 
-        # Други специалности
         other_spec_loc = driver_page.locator(".personal-information .other-specialties").first
-        if other_spec_loc.count() > 0:
-            details["Other_Specialties"] = other_spec_loc.inner_text().strip()
+        if other_spec_loc.count() > 0: details["Other_Specialties"] = other_spec_loc.inner_text().strip()
 
-        # Адрес (обикновено се намира под университета/лечебното заведение)
         addr_loc = driver_page.locator(".personal-information .fs-14.fw-normal.text-gray-500").first
-        if addr_loc.count() > 0:
-            details["Address"] = addr_loc.inner_text().strip()
-            
-        # Социални метрики (Последователи и Следвани)
+        if addr_loc.count() > 0: details["Address"] = addr_loc.inner_text().strip()
+
         social_stats = driver_page.locator(".social-information .bs-btn").all()
         for stat in social_stats:
-            number = stat.locator(".number").inner_text().strip() if stat.locator(".number").count() > 0 else "0"
-            text = stat.locator(".text").inner_text().strip().lower() if stat.locator(".text").count() > 0 else ""
-            if "последователи" in text:
-                details["Followers"] = number
-            elif "следвани" in text:
-                details["Following"] = number
+            num = stat.locator(".number").inner_text().strip() if stat.locator(".number").count() > 0 else "0"
+            txt = stat.locator(".text").inner_text().strip().lower() if stat.locator(".text").count() > 0 else ""
+            if "последователи" in txt: details["Followers"] = num
+            elif "следвани" in txt: details["Following"] = num
 
-        # Месторабота (Работно място)
         workplaces = driver_page.locator("experience .link").all_inner_texts()
-        if workplaces:
-            details["Workplace"] = " | ".join([w.strip() for w in workplaces if w.strip()])
+        if workplaces: details["Workplace"] = " | ".join([w.strip() for w in workplaces if w.strip()])
 
-        # Образование
         education = driver_page.locator("education .fs-18.fw-bold").all_inner_texts()
-        if education:
-            details["Education"] = " | ".join([e.strip() for e in education if e.strip()])
+        if education: details["Education"] = " | ".join([e.strip() for e in education if e.strip()])
             
-        # Организации
         organizations = driver_page.locator("organisation .fs-16.fw-semibold").all_inner_texts()
-        if organizations:
-            details["Organizations"] = " | ".join([o.strip().replace('\n', ' ') for o in organizations if o.strip()])
+        if organizations: details["Organizations"] = " | ".join([o.strip().replace('\n', ' ') for o in organizations if o.strip()])
 
-        # Контакти: Имейл
         email_loc = driver_page.locator("contacts a[href^='mailto:']").first
-        if email_loc.count() > 0:
-            details["Email"] = email_loc.inner_text().strip()
+        if email_loc.count() > 0: details["Email"] = email_loc.inner_text().strip()
 
-        # Контакти: Телефон
         phone_loc = driver_page.locator("contacts a[href^='tel:']").first
-        if phone_loc.count() > 0:
-            details["Phone"] = phone_loc.inner_text().strip()
+        if phone_loc.count() > 0: details["Phone"] = phone_loc.inner_text().strip()
 
-        # CV / Биография
         cv_loc = driver_page.locator("cv-description").first
-        if cv_loc.count() > 0:
-            details["CV_Bio"] = cv_loc.inner_text().strip().replace('\n', '  ')
+        if cv_loc.count() > 0: details["CV_Bio"] = cv_loc.inner_text().strip().replace('\n', '  ')
 
     except Exception as e:
-        print(f"[ERROR] Грешка при парсване на данните за {url}: {e}")
+        print(f"[ERROR] Грешка при парсване на данните (Лекар) за {url}: {e}")
+
+    return details
+
+def extract_hospital(url):
+    decoded_url = unquote(url)
+    details = {
+        "Name": "", "Type": "", "Address": "", "Website": "", "Phone": "", "Email": "", 
+        "Followers": "0", "Following": "0", "About": "", "Structures": "", "Team": "", "Source_URL": decoded_url
+    }
+
+    try:
+        name_loc = driver_page.locator(".personal-information h1").first
+        if name_loc.count() > 0: details["Name"] = name_loc.inner_text().strip()
+        
+        type_loc = driver_page.locator(".personal-information .fs-18.text-gray-500").first
+        if type_loc.count() > 0: details["Type"] = type_loc.inner_text().strip()
+
+        addr_loc = driver_page.locator(".personal-information .address").first
+        if addr_loc.count() > 0:
+            details["Address"] = addr_loc.inner_text().strip()
+        else:
+            addr_alt = driver_page.locator("page-contacts .contact-address .text-dark-blue-500").first
+            if addr_alt.count() > 0: details["Address"] = addr_alt.inner_text().strip()
+
+        web_loc = driver_page.locator(".personal-information a.website, .personal-information a[target='_blank']").first
+        if web_loc.count() > 0: details["Website"] = web_loc.inner_text().strip()
+
+        phone_loc = driver_page.locator("contacts a[href^='tel:']").first
+        if phone_loc.count() > 0: details["Phone"] = phone_loc.inner_text().strip()
+
+        email_loc = driver_page.locator("contacts a[href^='mailto:']").first
+        if email_loc.count() > 0: details["Email"] = email_loc.inner_text().strip()
+
+        social_stats = driver_page.locator(".social-information .bs-btn").all()
+        for stat in social_stats:
+            num = stat.locator(".number").inner_text().strip() if stat.locator(".number").count() > 0 else "0"
+            txt = stat.locator(".text").inner_text().strip().lower() if stat.locator(".text").count() > 0 else ""
+            if "последователи" in txt: details["Followers"] = num
+            elif "следвани" in txt: details["Following"] = num
+
+        about_loc = driver_page.locator("cv-description").first
+        if about_loc.count() > 0: details["About"] = about_loc.inner_text().strip().replace('\n', '  ')
+
+        structures = driver_page.locator("profile-structures a.bg-light-blue span").all_inner_texts()
+        if structures: details["Structures"] = " | ".join([s.strip() for s in structures if s.strip()])
+
+        team = driver_page.locator("team .team-member h3").all_inner_texts()
+        if team: details["Team"] = " | ".join([t.strip() for t in team if t.strip()])
+
+    except Exception as e:
+        print(f"[ERROR] Грешка при парсване на данните (Болница) за {url}: {e}")
 
     return details
 
 # ============================================================
-# ОСНОВНА ЛОГИКА
+# ОСНОВЕН СКРЕЙПЪР КОНТРОЛЕР
 # ============================================================
 def flag_for_continuation():
     with open(CONTINUE_FLAG_FILE, 'w') as f:
@@ -296,98 +335,125 @@ def main():
     global driver_page
     is_continuation = check_and_clear_continuation_flag()
 
+    # Инициализация при ново стартиране (спрямо график)
     if not is_continuation:
-        print("[INFO] Ново стартиране (не е продължение). Започва сканиране от страница 1.")
-        state["page"] = 1
-        state["finished"] = False
-        state["previous_first_doc"] = None
+        print("[INFO] Ново стартиране (не е продължение). Рестартиране на пагинацията за всички цели.")
+        for t in TARGETS:
+            cat = t["cat"]
+            state[cat]["page"] = 1
+            state[cat]["finished"] = False
+            state[cat]["previous_first_doc"] = None
         state["consecutive_fails"] = 0
         save_state()
 
-    if state.get("finished", False):
-        print("[INFO] Скрейпингът е вече маркиран като завършен.")
+    all_finished = all(state[t["cat"]]["finished"] for t in TARGETS)
+    if all_finished:
+        print("[INFO] Скрейпингът на всички категории е вече маркиран като завършен.")
         return
 
-    while not state["finished"]:
-        if time_limit_reached():
-            print("\n[INFO] Лимитът на времето е достигнат. Флагът за продължение е активиран.")
-            flag_for_continuation()
-            break
+    for target in TARGETS:
+        cat = target["cat"]
+        cat_name = target["name"]
+        cat_url = target["url"]
+        csv_file = os.path.join(output_dir, target["csv"])
 
-        page = state["page"]
-        print(f"\n--- Обработка на Страница: {page} ---")
-
-        current_url = f"{BASE_URL}&page={page}"
-
-        try:
-            driver_page.goto(current_url, wait_until="domcontentloaded")
-            decline_cookies()
-            driver_page.wait_for_selector(".search-result", timeout=15000)
-        except Exception as e:
-            print(f"[WARN] Грешка при зареждане на страница {page}: {e}")
-            state["consecutive_fails"] += 1
-            if state["consecutive_fails"] >= MAX_PAGE_RETRIES:
-                print(f"[ERROR] Достигнат лимит за грешки на стр. {page}. Край на обхождането.")
-                state["finished"] = True
-            save_state()
-            driver_page = restart_driver()
+        if state[cat]["finished"]:
+            print(f"[INFO] Цел [{cat_name}] е вече завършена. Преминаване към следващата...")
             continue
 
-        state["consecutive_fails"] = 0
+        print(f"\n=======================================================")
+        print(f" ЗАПОЧВАНЕ ОБХОЖДАНЕ НА ЦЕЛ: {cat_name.upper()} (CAT: {cat})")
+        print(f"=======================================================")
 
-        doc_links = driver_page.locator(".search-result a.search-list-title").all()
-        doctor_urls = []
-        for el in doc_links:
-            href = el.get_attribute("href")
-            if href:
-                full_url = urljoin(BASE_DOMAIN, href)
-                doctor_urls.append(full_url)
-
-        if not doctor_urls:
-            print("[INFO] Няма намерени профили. Край на пагинацията.")
-            state["finished"] = True
-            save_state()
-            break
-
-        if state["previous_first_doc"] == doctor_urls[0]:
-            print("[WARN] Засечено повторение на резултатите (край на пагинацията).")
-            state["finished"] = True
-            save_state()
-            break
-
-        state["previous_first_doc"] = doctor_urls[0]
-        time_limit_hit_in_profiles = False
-
-        for doc_url in doctor_urls:
+        while not state[cat]["finished"]:
             if time_limit_reached():
-                print("[INFO] Лимитът на времето е достигнат по време на обхождане на профили.")
+                print("\n[INFO] Лимитът на времето е достигнат. Флагът за продължение е активиран.")
                 flag_for_continuation()
-                time_limit_hit_in_profiles = True
-                break
+                return
 
-            if unquote(doc_url) in parsed_urls or doc_url in parsed_urls:
+            page = state[cat]["page"]
+            print(f"\n--- [{cat_name.upper()}] Обработка на Страница: {page} ---")
+
+            current_url = f"{cat_url}&page={page}"
+
+            try:
+                driver_page.goto(current_url, wait_until="domcontentloaded")
+                decline_cookies()
+                driver_page.wait_for_selector(".search-result", timeout=15000)
+            except Exception as e:
+                print(f"[WARN] Грешка при зареждане на страница {page} ({cat_name}): {e}")
+                state["consecutive_fails"] += 1
+                if state["consecutive_fails"] >= MAX_PAGE_RETRIES:
+                    print(f"[ERROR] Достигнат лимит за грешки на стр. {page}. Край на обхождането за тази цел.")
+                    state[cat]["finished"] = True
+                save_state()
+                driver_page = restart_driver()
                 continue
 
-            details = extract_doctor_details(doc_url)
-            if details:
-                with open(csv_file_path, mode="a", encoding="utf-8-sig", newline="") as f:
-                    writer = csv.DictWriter(f, fieldnames=fieldnames)
-                    writer.writerow(details)
-                
-                mark_as_parsed(doc_url)
-                print(f"  [+] Записан: {details['Name']} | {unquote(doc_url)}")
-            else:
-                add_failed_profile(doc_url, page, "Неуспешно извличане")
+            state["consecutive_fails"] = 0
 
-        if time_limit_hit_in_profiles:
-            break
+            # Извличане на линковете
+            doc_links = driver_page.locator(".search-result a.search-list-title").all()
+            profile_urls = []
+            for el in doc_links:
+                href = el.get_attribute("href")
+                if href:
+                    full_url = urljoin(BASE_DOMAIN, href)
+                    profile_urls.append(full_url)
 
-        state["page"] += 1
-        save_state()
+            if not profile_urls:
+                print(f"[INFO] Няма намерени профили. Край на пагинацията за {cat_name}.")
+                state[cat]["finished"] = True
+                save_state()
+                break
+
+            if state[cat]["previous_first_doc"] == profile_urls[0]:
+                print(f"[WARN] Засечено повторение на резултатите (край на пагинацията) за {cat_name}.")
+                state[cat]["finished"] = True
+                save_state()
+                break
+
+            state[cat]["previous_first_doc"] = profile_urls[0]
+            time_limit_hit_in_profiles = False
+
+            for url in profile_urls:
+                if time_limit_reached():
+                    print("[INFO] Лимитът на времето е достигнат по време на обхождане на профили.")
+                    flag_for_continuation()
+                    time_limit_hit_in_profiles = True
+                    break
+
+                if unquote(url) in parsed_urls or url in parsed_urls:
+                    continue
+
+                try:
+                    driver_page.goto(url, wait_until="domcontentloaded")
+                    driver_page.wait_for_selector(".personal-information", timeout=15000)
+                except Exception as e:
+                    print(f"[ERROR] Грешка при зареждане на детайли за {url}: {e}")
+                    add_failed_profile(url, cat, page, "Мрежова/DOM грешка при отваряне")
+                    continue
+
+                details = extract_doctor(url) if cat == "101" else extract_hospital(url)
+
+                if details and details.get("Name"):
+                    with open(csv_file, mode="a", encoding="utf-8-sig", newline="") as f:
+                        writer = csv.DictWriter(f, fieldnames=target["fields"])
+                        writer.writerow(details)
+                    
+                    mark_as_parsed(url)
+                    print(f"  [+] Записан: {details['Name']} | {unquote(url)}")
+                else:
+                    add_failed_profile(url, cat, page, "Неуспешно извличане на структурата")
+
+            if time_limit_hit_in_profiles:
+                return
+
+            state[cat]["page"] += 1
+            save_state()
 
     close_driver()
-    if state.get("finished", False):
-        print("\n[INFO] Обхождането на всички профили приключи успешно!")
+    print("\n[INFO] Обхождането на всички профили и категории приключи успешно!")
 
 if __name__ == "__main__":
     try:
