@@ -22,6 +22,7 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 PROCESSED_UIN_FILE = os.path.join(OUTPUT_DIR, "processed_blsbg_uin_codes.txt")
 CONTINUE_FLAG_FILE = os.path.join(OUTPUT_DIR, "CONTINUE_FLAG_BLSBG")
+RESUME_STATE_FILE = os.path.join(OUTPUT_DIR, "resume_state.txt")
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, "bg_medics_dynamic_2029.xlsx")
 
 MAX_RUNTIME_SECONDS = 20400  # Enforce limit for CI/CD environments
@@ -75,8 +76,6 @@ def main_loop():
         os.remove(CONTINUE_FLAG_FILE)
 
     all_data = []
-    
-    # 1. Зареждаме съществуващите кодове от текстовия файл
     processed_uins = get_processed_uins()
 
     if os.path.exists(OUTPUT_FILE):
@@ -86,7 +85,6 @@ def main_loop():
             all_data = df_existing.to_dict('records')
             print(f"[INFO] Successfully loaded {len(all_data)} records from prior sessions.")
             
-            # 2. Автоматично извличане на UIN от Excel файла и запис в текстовия файл
             extracted_count = 0
             for row in all_data:
                 existing_uin = str(row.get("UIN", "")).strip()
@@ -102,6 +100,26 @@ def main_loop():
             print(f"[WARN] Failed to parse existing file. Starting with empty dataset. Error: {e}")
 
     print(f"[INFO] Index loaded: {len(processed_uins)} unique UINs ready for deduplication.")
+
+    # Логика за паметта (Resume State)
+    start_region = 1
+    start_page = 1
+
+    if os.path.exists(RESUME_STATE_FILE):
+        file_age = time.time() - os.path.getmtime(RESUME_STATE_FILE)
+        if file_age > 86400: # 24 часа в секунди
+            print("[INFO] Resume state is older than 24 hours. Starting from scratch, РАЗБИРААЙ.")
+            os.remove(RESUME_STATE_FILE)
+        else:
+            try:
+                with open(RESUME_STATE_FILE, "r", encoding='utf-8') as f:
+                    parts = f.read().strip().split(",")
+                    if len(parts) == 2:
+                        start_region = int(parts[0])
+                        start_page = int(parts[1])
+                        print(f"[INFO] Memory found! Resuming from Region {start_region}, Page {start_page}.")
+            except Exception as e:
+                print(f"[WARN] Corrupt resume file. Starting from scratch. Error: {e}")
 
     print("[INFO] Configuring WebDriver instance...")
     options = webdriver.ChromeOptions()
@@ -120,13 +138,13 @@ def main_loop():
 
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
-    for r in range(1, 29): 
+    for r in range(start_region, 29): 
         region_code = f"{r:02d}"
-        page_num = 1 
+        page_num = start_page if r == start_region else 1 
         last_first_row_data = None  
         
         print(f"\n========================================")
-        print(f" PROCESSING REGION: {region_code}")
+        print(f" PROCESSING REGION: {region_code} / 28")
         print(f"========================================")
         
         while True:
@@ -135,6 +153,11 @@ def main_loop():
                 print("\n[WARN] Execution runtime limit approaching. Initiating graceful shutdown...")
                 with open(CONTINUE_FLAG_FILE, 'w') as f:
                     f.write("CONTINUE_REQUIRED")
+                
+                # Записваме точно докъде сме стигнали
+                with open(RESUME_STATE_FILE, 'w', encoding='utf-8') as f:
+                    f.write(f"{r},{page_num}")
+                    
                 save_to_excel(all_data, OUTPUT_FILE)
                 driver.quit()
                 sys.exit(0)
@@ -150,6 +173,11 @@ def main_loop():
                     print("\n[WARN] Runtime limit reached while waiting for server. Shutting down...")
                     with open(CONTINUE_FLAG_FILE, 'w') as f:
                         f.write("CONTINUE_REQUIRED")
+                        
+                    # Записваме точно докъде сме стигнали
+                    with open(RESUME_STATE_FILE, 'w', encoding='utf-8') as f:
+                        f.write(f"{r},{page_num}")
+                        
                     save_to_excel(all_data, OUTPUT_FILE)
                     driver.quit()
                     sys.exit(0)
@@ -226,7 +254,6 @@ def main_loop():
                     
                     valid_records_this_page += 1
 
-                    # 3. Проверява паметта (сета) на секундата - ако го има, скипва директно
                     if uin in processed_uins:
                         continue 
                     
@@ -260,7 +287,6 @@ def main_loop():
                     all_data.append(data_row)
                     new_records_this_page += 1
                     
-                    # 4. Записва новия доктор веднага в паметта и файла
                     processed_uins.add(uin)
                     save_processed_uin(uin)
                 
@@ -282,6 +308,10 @@ def main_loop():
                 break 
             
             page_num += 1
+
+    # Изтриваме паметта като приключим успешно всичките 28 региона
+    if os.path.exists(RESUME_STATE_FILE):
+        os.remove(RESUME_STATE_FILE)
 
     save_to_excel(all_data, OUTPUT_FILE)
     driver.quit()
