@@ -61,10 +61,15 @@ jobs:
             git add blsbg_outputs/bg_medics_dynamic_2029.xlsx
           fi
           
+          # НОВО: Запазваме паметта за текущия регион в Git
+          if [ -f "blsbg_outputs/resume_state.txt" ]; then
+            git add blsbg_outputs/resume_state.txt
+          fi
+          
           if git diff --staged --quiet; then
             echo "No new changes to commit."
           else
-            git commit -m "Auto-save state: Update BLS BG UIN codes tracker and extracted medical data"
+            git commit -m "Auto-save state: Update BLS BG UIN codes tracker, memory state, and extracted data"
             git pull origin main --rebase
             git push
           fi
