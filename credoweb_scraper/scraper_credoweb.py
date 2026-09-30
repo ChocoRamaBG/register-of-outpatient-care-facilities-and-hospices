@@ -44,8 +44,9 @@ CONTINUE_FLAG_FILE = os.path.join(output_dir, "CONTINUE_FLAG_CREDOWEB")
 # СХЕМА ЗА ЗАПИС НА ДАННИ (CSV)
 # ============================================================
 fieldnames = [
-    "Name", "Specialty", "Other_Specialties", "Address", "Phone", "Email", 
-    "Workplace", "Education", "CV_Bio", "Source_URL"
+    "Name", "Profession_Tags", "Specialty", "Other_Specialties", 
+    "Address", "Workplace", "Education", "Organizations",
+    "Phone", "Email", "Followers", "Following", "CV_Bio", "Source_URL"
 ]
 
 if not os.path.exists(csv_file_path):
@@ -150,7 +151,6 @@ def create_driver():
         user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     )
     
-    # Блокиране на изображения и стилове за по-бързо зареждане на Angular
     _context.route("**/*.{png,jpg,jpeg,webp,svg,css,woff,woff2}", lambda route: route.abort())
     
     _page = _context.new_page()
@@ -202,44 +202,74 @@ def extract_doctor_details(url):
     decoded_url = unquote(url)
     
     details = {
-        "Name": "", "Specialty": "", "Other_Specialties": "", "Address": "", 
-        "Phone": "", "Email": "", "Workplace": "", "Education": "", 
+        "Name": "", "Profession_Tags": "", "Specialty": "", "Other_Specialties": "", 
+        "Address": "", "Workplace": "", "Education": "", "Organizations": "",
+        "Phone": "", "Email": "", "Followers": "0", "Following": "0", 
         "CV_Bio": "", "Source_URL": decoded_url
     }
 
     try:
+        # Име
         name_loc = driver_page.locator(".personal-information h1 span").first
         if name_loc.count() > 0:
             details["Name"] = name_loc.inner_text().strip()
+            
+        # Професионални тагове (пр. "Лекар", "Само за специалисти")
+        prof_tags = driver_page.locator(".personal-information cw-tags a span").all_inner_texts()
+        if prof_tags:
+             details["Profession_Tags"] = ", ".join([t.strip() for t in prof_tags if t.strip()])
 
+        # Основна специалност
         spec_loc = driver_page.locator(".personal-information .fs-16.fw-semibold").first
         if spec_loc.count() > 0:
             details["Specialty"] = spec_loc.inner_text().strip()
 
+        # Други специалности
         other_spec_loc = driver_page.locator(".personal-information .other-specialties").first
         if other_spec_loc.count() > 0:
             details["Other_Specialties"] = other_spec_loc.inner_text().strip()
 
+        # Адрес (обикновено се намира под университета/лечебното заведение)
         addr_loc = driver_page.locator(".personal-information .fs-14.fw-normal.text-gray-500").first
         if addr_loc.count() > 0:
             details["Address"] = addr_loc.inner_text().strip()
+            
+        # Социални метрики (Последователи и Следвани)
+        social_stats = driver_page.locator(".social-information .bs-btn").all()
+        for stat in social_stats:
+            number = stat.locator(".number").inner_text().strip() if stat.locator(".number").count() > 0 else "0"
+            text = stat.locator(".text").inner_text().strip().lower() if stat.locator(".text").count() > 0 else ""
+            if "последователи" in text:
+                details["Followers"] = number
+            elif "следвани" in text:
+                details["Following"] = number
 
+        # Месторабота (Работно място)
         workplaces = driver_page.locator("experience .link").all_inner_texts()
         if workplaces:
             details["Workplace"] = " | ".join([w.strip() for w in workplaces if w.strip()])
 
-        education = driver_page.locator("education .fs-16").all_inner_texts()
+        # Образование
+        education = driver_page.locator("education .fs-18.fw-bold").all_inner_texts()
         if education:
             details["Education"] = " | ".join([e.strip() for e in education if e.strip()])
+            
+        # Организации
+        organizations = driver_page.locator("organisation .fs-16.fw-semibold").all_inner_texts()
+        if organizations:
+            details["Organizations"] = " | ".join([o.strip().replace('\n', ' ') for o in organizations if o.strip()])
 
-        email_loc = driver_page.locator("a[href^='mailto:']").first
+        # Контакти: Имейл
+        email_loc = driver_page.locator("contacts a[href^='mailto:']").first
         if email_loc.count() > 0:
             details["Email"] = email_loc.inner_text().strip()
 
-        phone_loc = driver_page.locator("a[href^='tel:']").first
+        # Контакти: Телефон
+        phone_loc = driver_page.locator("contacts a[href^='tel:']").first
         if phone_loc.count() > 0:
             details["Phone"] = phone_loc.inner_text().strip()
 
+        # CV / Биография
         cv_loc = driver_page.locator("cv-description").first
         if cv_loc.count() > 0:
             details["CV_Bio"] = cv_loc.inner_text().strip().replace('\n', '  ')
@@ -266,8 +296,6 @@ def main():
     global driver_page
     is_continuation = check_and_clear_continuation_flag()
 
-    # Ако скриптът стартира без флага, значи е ново обхождане по график.
-    # Нулираме състоянието, за да обходим всички страници и да намерим нови профили.
     if not is_continuation:
         print("[INFO] Ново стартиране (не е продължение). Започва сканиране от страница 1.")
         state["page"] = 1
