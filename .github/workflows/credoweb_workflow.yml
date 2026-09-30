@@ -64,6 +64,10 @@ jobs:
           if [ -f "credoweb_outputs/credoweb_doctors_full.csv" ]; then
             git add -f credoweb_outputs/credoweb_doctors_full.csv
           fi
+
+          if [ -f "credoweb_outputs/credoweb_hospitals_full.csv" ]; then
+            git add -f credoweb_outputs/credoweb_hospitals_full.csv
+          fi
           
           if git diff --staged --quiet; then
             echo "No new changes to commit."
