@@ -15,6 +15,8 @@ on:
       - "superdoc_scraper/superdoc_outputs/superdoc_data_mega.csv"
       - "hisbg_scraper/hisbg_outputs/HISBG_FINAL_DOCTORS_DATA.xlsx"
       - "hisbg_scraper/hisbg_outputs/hisbg_city_dump.xlsx"
+      - "credoweb_scraper/credoweb_outputs/credoweb_doctors_full.csv"
+      - "credoweb_scraper/credoweb_outputs/credoweb_hospitals_full.csv"
   # Scraper commits made with GITHUB_TOKEN do not trigger on:push.
   # The local bridge checks configured source content before requesting a build.
   workflow_run:
@@ -27,6 +29,7 @@ on:
       - "(zdraven_arhiv.com) Autonomous Registry Scraper"
       - "(superdoc.bg) Autonomous Registry Scraper"
       - "(his.bg) Autonomous Medical Registry Scraper"
+      - "(credoweb.bg) Autonomous Registry Scraper"
     types: [completed]
     branches: [main]
   workflow_dispatch:
