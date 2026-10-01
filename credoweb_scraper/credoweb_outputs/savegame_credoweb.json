@@ -1,0 +1,14 @@
+{
+  "101": {
+    "page": 834,
+    "finished": true,
+    "previous_first_doc": "https://www.credoweb.bg/profile/5576/d-r-dimitar-tanev",
+    "consecutive_fails": 3
+  },
+  "103": {
+    "page": 185,
+    "finished": true,
+    "previous_first_doc": "https://www.credoweb.bg/page/19752/mbal-vita/structures/164692/metabolitna-i-bariatrichna-hirurgiya",
+    "consecutive_fails": 3
+  }
+}
