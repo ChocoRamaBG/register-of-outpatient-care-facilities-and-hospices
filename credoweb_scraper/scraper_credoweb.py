@@ -374,7 +374,10 @@ def main():
             page = state[cat]["page"]
             print(f"\n--- [{cat_name.upper()}] Обработка на Страница: {page} ---")
 
-            current_url = f"{cat_url}&page={page}"
+            if page == 1:
+                current_url = cat_url
+            else:
+                current_url = f"{cat_url}&page={page - 1}"
 
             try:
                 driver_page.goto(current_url, wait_until="domcontentloaded")
