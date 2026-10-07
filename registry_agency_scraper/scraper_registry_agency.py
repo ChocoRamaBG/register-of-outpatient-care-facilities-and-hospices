@@ -1,52 +1,19 @@
 import os
-import time
+import csv
 import json
+import time
 import sys
-import urllib.parse
-import traceback
-import signal
-import threading
-import atexit
 from datetime import datetime
-from pathlib import Path
+from playwright.sync_api import sync_playwright
 
-from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
-
-
-# ============================================================
-# CONFIG
-# ============================================================
-
-START_TIME = time.time()
-
-TIME_LIMIT_SECONDS = 5 * 60 * 60 + 20 * 60  # 5h 20m
-
-HEARTBEAT_INTERVAL = 30
-HEARTBEAT_LOG_INTERVAL = 300
-
-PAGE_TIMEOUT = 30_000
-SELECTOR_TIMEOUT = 8_000
-
-MAX_QUERY_RETRIES = 3
-RATE_LIMIT_BACKOFFS = [30, 60, 120, 180]
-
-STATE_SAVE_EVERY_PAGE = True
-
-
-# ============================================================
-# UTF-8
-# ============================================================
-
-if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+if sys.stdout.encoding.lower() != 'utf-8':
     try:
-        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stdout.reconfigure(encoding='utf-8')
     except AttributeError:
         pass
 
-
-# ============================================================
-# PATHS
-# ============================================================
+START_TIME = time.time()
+TIME_LIMIT_SECONDS = 5.4 * 60 * 60
 
 try:
     base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -54,1429 +21,371 @@ except NameError:
     base_dir = os.getcwd()
 
 output_dir = os.path.join(base_dir, "registry_agency_outputs")
-diagnostics_dir = os.path.join(output_dir, "diagnostics")
-
 os.makedirs(output_dir, exist_ok=True)
-os.makedirs(diagnostics_dir, exist_ok=True)
 
+# Новата логика за динамично генериране на файлове под 90MB
+def get_active_csv_path(directory, base_filename="registry_agency_data_mega"):
+    part = 1
+    while True:
+        suffix = f"_part{part}" if part > 1 else ""
+        file_path = os.path.join(directory, f"{base_filename}{suffix}.csv")
+        
+        # Ако не съществува или е под ~90MB (94371840 bytes)
+        if not os.path.exists(file_path) or os.path.getsize(file_path) < 94371840:
+            return file_path
+        part += 1
 
-OUTPUT_FILE = os.path.join(
-    output_dir,
-    "100_percent_valid_uics.txt"
-)
-
-PROCESSED_UICS_FILE = os.path.join(
-    output_dir,
-    "processed_uics_registry.txt"
-)
-
-QUERIES_MEMORY_FILE = os.path.join(
-    output_dir,
-    "processed_queries.txt"
-)
-
-STATE_FILE = os.path.join(
-    output_dir,
-    "savegame_uic_finder.json"
-)
-
-CONTINUE_FLAG_FILE = os.path.join(
-    output_dir,
-    "CONTINUE_FLAG_UIC_FINDER"
-)
-
-FAILED_QUERIES_FILE = os.path.join(
-    output_dir,
-    "failed_queries.txt"
-)
-
-HEARTBEAT_FILE = os.path.join(
-    diagnostics_dir,
-    "heartbeat.json"
-)
-
-LAST_ERROR_FILE = os.path.join(
-    diagnostics_dir,
-    "last_error.txt"
-)
-
-
-# ============================================================
-# GLOBAL RUNTIME STATE
-# ============================================================
-
-state = {
-    "query_idx": 0,
-    "query": None,
-    "page_num": 0,
-    "status": "starting",
-    "started_at": datetime.now().isoformat(),
-    "last_activity": datetime.now().isoformat(),
-    "last_url": None,
-    "total_uics": 0,
-    "last_new_uics": 0,
-    "elapsed_seconds": 0,
-    "error": None,
-}
-
-_shutdown_requested = False
-_heartbeat_stop = threading.Event()
-_last_heartbeat_log = 0
-
-
-# ============================================================
-# LOGGING
-# ============================================================
+memory_file_path = os.path.join(output_dir, 'processed_uics_registry.txt')
+state_file = os.path.join(output_dir, "savegame_registry_agency.json")
+CONTINUE_FLAG_FILE = os.path.join(output_dir, "CONTINUE_FLAG_REGISTRY_AGENCY")
+PRIORITY_LIST_FILE = os.path.join(output_dir, "100_percent_valid_uics.txt")
 
 def log_msg(msg):
-    current_time = datetime.now().strftime("%H:%M:%S")
+    """Помощна функция за красиво принтиране с точен час."""
+    current_time = datetime.now().strftime('%H:%M:%S')
+    print(f"[{current_time}] {msg}", flush=True)
 
-    elapsed = time.time() - START_TIME
-    elapsed_h = int(elapsed // 3600)
-    elapsed_m = int((elapsed % 3600) // 60)
-    elapsed_s = int(elapsed % 60)
-
-    print(
-        f"[{current_time}] "
-        f"[+{elapsed_h:02d}:{elapsed_m:02d}:{elapsed_s:02d}] "
-        f"{msg}",
-        flush=True
-    )
-
-
-# ============================================================
-# STATE
-# ============================================================
-
-def touch_state():
-    state["last_activity"] = datetime.now().isoformat()
-    state["elapsed_seconds"] = int(time.time() - START_TIME)
-
-
-def save_state(reason="unknown"):
-    touch_state()
-
-    payload = {
-        **state,
-        "saved_at": datetime.now().isoformat(),
-        "save_reason": reason,
-    }
-
-    temp_file = STATE_FILE + ".tmp"
-
-    try:
-        with open(temp_file, "w", encoding="utf-8") as f:
-            json.dump(
-                payload,
-                f,
-                ensure_ascii=False,
-                indent=2
-            )
-
-        os.replace(temp_file, STATE_FILE)
-
-    except Exception as e:
-        log_msg(f"[STATE ERROR] Не успях да запазя state: {repr(e)}")
-
-
-def load_state():
-    if not os.path.exists(STATE_FILE):
-        return
-
-    try:
-        with open(STATE_FILE, "r", encoding="utf-8") as f:
-            loaded = json.load(f)
-
-        for key in state:
-            if key in loaded:
-                state[key] = loaded[key]
-
-        log_msg(
-            f"[STATE] Възстановен query_idx={state['query_idx']}, "
-            f"query={state['query']}, "
-            f"page={state['page_num']}"
-        )
-
-    except Exception as e:
-        log_msg(
-            f"[STATE] Не успях да заредя state: {repr(e)}"
-        )
-
-
-# ============================================================
-# TIME LIMIT
-# ============================================================
+# ==========================================
+# МОДУЛ 11 ЦЕДКА ЗА ВАЛИДЕН ЕИК (БУЛСТАТ)
+# ==========================================
+def is_valid_eik(eik: str) -> bool:
+    if len(eik) != 9 or not eik.isdigit():
+        return False
+    weights1 = [1, 2, 3, 4, 5, 6, 7, 8]
+    sum1 = sum(int(eik[i]) * weights1[i] for i in range(8))
+    rem1 = sum1 % 11
+    if rem1 != 10:
+        return rem1 == int(eik[8])
+    weights2 = [3, 4, 5, 6, 7, 8, 9, 10]
+    sum2 = sum(int(eik[i]) * weights2[i] for i in range(8))
+    rem2 = sum2 % 11
+    if rem2 != 10:
+        return rem2 == int(eik[8])
+    return int(eik[8]) == 0
+# ==========================================
 
 def time_limit_reached():
     return (time.time() - START_TIME) >= TIME_LIMIT_SECONDS
 
-
-# ============================================================
-# CONTINUATION FLAG
-# ============================================================
-
 def flag_for_continuation():
     try:
-        with open(CONTINUE_FLAG_FILE, "w", encoding="utf-8") as f:
-            f.write("CONTINUE\n")
-
-        log_msg("[CONTINUE] Флагът за продължаване е записан.")
-
-    except Exception as e:
-        log_msg(
-            f"[CONTINUE ERROR] {repr(e)}"
-        )
-
+        with open(CONTINUE_FLAG_FILE, 'w') as f:
+            f.write("CONTINUE")
+    except Exception:
+        pass
 
 def clear_continuation_flag():
     if os.path.exists(CONTINUE_FLAG_FILE):
         try:
             os.remove(CONTINUE_FLAG_FILE)
+        except:
+            pass
+
+state = {
+    "priority_index": 0,
+    "current_index": 0
+}
+
+if os.path.exists(state_file):
+    try:
+        with open(state_file, "r", encoding="utf-8") as f:
+            loaded_state = json.load(f)
+            state["priority_index"] = loaded_state.get("priority_index", 0)
+            state["current_index"] = loaded_state.get("current_index", 0)
+    except Exception:
+        pass
+
+def save_state():
+    payload = {
+        "priority_index": state["priority_index"],
+        "current_index": state["current_index"],
+        "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+    temp_file = state_file + ".tmp"
+    try:
+        with open(temp_file, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+        os.replace(temp_file, state_file)
+    except Exception:
+        pass
+
+def load_memory():
+    processed = set()
+    if os.path.exists(memory_file_path):
+        with open(memory_file_path, "r", encoding="utf-8") as f:
+            for line in f:
+                processed.add(line.strip())
+    return processed
+
+def save_to_memory(uic_str):
+    with open(memory_file_path, 'a', encoding='utf-8') as f:
+        f.write(f"{uic_str}\n")
+
+# ==========================================
+# ИЗНЕСЕНА ЛОГИКА ЗА СКРЕЙПВАНЕ
+# ==========================================
+def scrape_company(uic_str, page, base_url, processed_uics, csv_writer_args):
+    """Скрейпва даден ЕИК. Връща (статус, име_на_фирма_или_грешка)."""
+    if uic_str in processed_uics:
+        return "SKIPPED", ""
+
+    target_url = f"{base_url}{uic_str}"
+    fieldnames, label_map = csv_writer_args
+
+    try:
+        page.goto(target_url, wait_until='domcontentloaded', timeout=15000)
+        
+        try:
+            page.wait_for_selector('.page-heading', timeout=1500)
         except Exception:
             pass
 
+        field_containers = page.locator('.field-container')
+        heading_title_loc = page.locator('.page-heading-title')
+        heading_subtitle_loc = page.locator('.page-heading-sub-title')
 
-# ============================================================
-# HEARTBEAT
-# ============================================================
+        # Ако страницата е празна (няма такава фирма)
+        if heading_title_loc.count() == 0 and field_containers.count() == 0:
+            save_to_memory(uic_str)
+            processed_uics.add(uic_str)
+            return "EMPTY", ""
 
-def heartbeat_worker():
-    global _last_heartbeat_log
+        row_data = {"UIC_Query": uic_str, "URL": target_url}
+        other_data = {}
 
-    while not _heartbeat_stop.wait(HEARTBEAT_INTERVAL):
+        if heading_title_loc.count() > 0:
+            row_data["Заглавие (Статус)"] = heading_title_loc.first.inner_text().strip()
 
-        try:
-            touch_state()
+        if heading_subtitle_loc.count() > 0:
+            subtitle_text = heading_subtitle_loc.first.inner_text().strip()
+            if "състояние към дата:" in subtitle_text:
+                row_data["Състояние към дата"] = subtitle_text.split("състояние към дата:")[-1].strip()
+            else:
+                row_data["Състояние към дата"] = subtitle_text
 
-            heartbeat = {
-                "timestamp": datetime.now().isoformat(),
-                "elapsed_seconds": int(time.time() - START_TIME),
-                "query_idx": state["query_idx"],
-                "query": state["query"],
-                "page_num": state["page_num"],
-                "status": state["status"],
-                "last_url": state["last_url"],
-                "total_uics": state["total_uics"],
-                "last_new_uics": state["last_new_uics"],
-            }
+        count = field_containers.count()
+        for j in range(count):
+            container = field_containers.nth(j)
+            title_loc = container.locator('.field-title')
+            text_loc = container.locator('.field-text')
 
-            with open(
-                HEARTBEAT_FILE,
-                "w",
-                encoding="utf-8"
-            ) as f:
-                json.dump(
-                    heartbeat,
-                    f,
-                    ensure_ascii=False,
-                    indent=2
-                )
+            if title_loc.count() > 0 and text_loc.count() > 0:
+                raw_title = title_loc.first.inner_text().strip()
+                
+                text_elements = text_loc.all()
+                raw_text = "\n".join([el.inner_text().strip() for el in text_elements if el.inner_text().strip()])
+                
+                mapped_title = label_map.get(raw_title, raw_title)
+                
+                if mapped_title == "1. ЕИК/ПИК":
+                    lines = [line.strip() for line in raw_text.split('\n') if line.strip()]
+                    if lines:
+                        row_data["ЕИК/ПИК"] = lines[0]
+                    if len(lines) > 1 and "Фирмено дело:" in lines[1]:
+                        row_data["Фирмено дело"] = lines[1].replace("Фирмено дело:", "").strip()
+                elif mapped_title == "2. Фирма/Наименование":
+                    row_data["Фирма/Наименование"] = raw_text
+                elif mapped_title == "3. Правна форма":
+                    row_data["Правна форма"] = raw_text
+                elif mapped_title == "5. Седалище и адрес на управление":
+                    lines = [line.strip() for line in raw_text.split('\n') if line.strip()]
+                    address_parts = []
+                    for line in lines:
+                        if line.startswith("Държава:"):
+                            row_data["Държава"] = line.replace("Държава:", "").strip()
+                        elif line.startswith("Област:"):
+                            row_data["Област и Община"] = line.strip()
+                        elif line.startswith("Населено място:"):
+                            row_data["Населено място"] = line.replace("Населено място:", "").strip()
+                        else:
+                            address_parts.append(line.strip())
+                    if address_parts:
+                        row_data["Адрес"] = ", ".join(address_parts)
+                elif mapped_title == "6. Предмет на дейност":
+                    row_data["Предмет на дейност"] = raw_text
+                elif mapped_title == "18. Физическо лице - търговец":
+                    parts = raw_text.split(', Държава:')
+                    row_data["Физическо лице"] = parts[0].strip()
+                else:
+                    other_data[raw_title] = raw_text
 
-            now = time.time()
+        if other_data:
+            row_data["Other_Data"] = json.dumps(other_data, ensure_ascii=False)
 
-            if now - _last_heartbeat_log >= HEARTBEAT_LOG_INTERVAL:
-                _last_heartbeat_log = now
+        # РАЗБИРААЙ - тука вземаме актуалния файл, за да не се прецакаме с размера
+        current_csv_file = get_active_csv_path(output_dir)
+        file_exists = os.path.exists(current_csv_file)
 
-                log_msg(
-                    "[HEARTBEAT] "
-                    f"query_idx={state['query_idx']} | "
-                    f"query={state['query']} | "
-                    f"page={state['page_num']} | "
-                    f"total_uics={state['total_uics']} | "
-                    f"status={state['status']}"
-                )
+        with open(current_csv_file, mode='a', newline='', encoding='utf-8-sig') as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
+            if not file_exists:
+                writer.writeheader()
+            writer.writerow(row_data)
 
-        except Exception as e:
-            log_msg(
-                f"[HEARTBEAT ERROR] {repr(e)}"
-            )
-
-
-# ============================================================
-# SIGNAL HANDLING
-# ============================================================
-
-def handle_shutdown(signum, frame):
-    global _shutdown_requested
-
-    _shutdown_requested = True
-
-    log_msg(
-        f"[SHUTDOWN] Получен signal {signum}. "
-        f"Опит за безопасно спиране..."
-    )
-
-    state["status"] = f"shutdown_signal_{signum}"
-
-    try:
-        save_state(
-            reason=f"signal_{signum}"
-        )
-    except Exception:
-        pass
-
-    try:
-        flag_for_continuation()
-    except Exception:
-        pass
-
-    raise SystemExit(143)
-
-
-signal.signal(
-    signal.SIGTERM,
-    handle_shutdown
-)
-
-signal.signal(
-    signal.SIGINT,
-    handle_shutdown
-)
-
-
-# ============================================================
-# ATEXIT
-# ============================================================
-
-def emergency_save():
-    try:
-        state["status"] = "atexit"
-        save_state(reason="atexit")
-    except Exception:
-        pass
-
-
-atexit.register(emergency_save)
-
-
-# ============================================================
-# DEBUGGING
-# ============================================================
-
-def save_debug_artifacts(page, label):
-    timestamp = datetime.now().strftime(
-        "%Y%m%d_%H%M%S"
-    )
-
-    safe_label = "".join(
-        c if c.isalnum() or c in "-_" else "_"
-        for c in str(label)
-    )
-
-    prefix = os.path.join(
-        diagnostics_dir,
-        f"{timestamp}_{safe_label}"
-    )
-
-    try:
-        if page:
-            try:
-                page.screenshot(
-                    path=f"{prefix}.png",
-                    full_page=True
-                )
-            except Exception as e:
-                log_msg(
-                    f"[DEBUG] Screenshot failed: {repr(e)}"
-                )
-
-            try:
-                html = page.content()
-
-                with open(
-                    f"{prefix}.html",
-                    "w",
-                    encoding="utf-8"
-                ) as f:
-                    f.write(html)
-
-            except Exception as e:
-                log_msg(
-                    f"[DEBUG] HTML dump failed: {repr(e)}"
-                )
+        save_to_memory(uic_str)
+        processed_uics.add(uic_str)
+        
+        # Опитваме се да извадим името за лога
+        company_name = row_data.get("Заглавие (Статус)", row_data.get("Фирма/Наименование", "Неизвестно име"))
+        return "SUCCESS", company_name
 
     except Exception as e:
-        log_msg(
-            f"[DEBUG] Debug artifact error: {repr(e)}"
-        )
+        return "ERROR", str(e)
 
-
-def save_exception(label, exc):
-    try:
-        text = (
-            f"Timestamp: {datetime.now().isoformat()}\n"
-            f"Label: {label}\n"
-            f"Exception: {repr(exc)}\n\n"
-            f"STATE:\n"
-            f"{json.dumps(state, ensure_ascii=False, indent=2)}\n\n"
-            f"TRACEBACK:\n"
-            f"{traceback.format_exc()}\n"
-        )
-
-        with open(
-            LAST_ERROR_FILE,
-            "w",
-            encoding="utf-8"
-        ) as f:
-            f.write(text)
-
-    except Exception:
-        pass
-
-
-# ============================================================
-# SAFE PAGE HELPERS
-# ============================================================
-
-def safe_page_content(page):
-    if page is None:
-        return ""
-
-    try:
-        return page.content()
-
-    except Exception as e:
-        log_msg(
-            f"[PAGE CONTENT ERROR] {repr(e)}"
-        )
-        return ""
-
-
-def is_rate_limited(page, exception=None):
-    if exception and "RATE_LIMIT" in str(exception):
-        return True
-
-    content = safe_page_content(page)
-
-    return (
-        "Достигнат е максимално допустимият брой заявки"
-        in content
-    )
-
-
-# ============================================================
-# UIC LOADING
-# ============================================================
-
-def load_uics():
-    extracted_uics = set()
-
-    if os.path.exists(OUTPUT_FILE):
-
-        with open(
-            OUTPUT_FILE,
-            "r",
-            encoding="utf-8"
-        ) as f:
-
-            for line in f:
-
-                value = line.strip()
-
-                if value:
-                    extracted_uics.add(value)
-
-    return extracted_uics
-
-
-def sync_missing_eiks(extracted_uics):
-    if not os.path.exists(PROCESSED_UICS_FILE):
-        return
-
-    try:
-        missing_count = 0
-        with open(PROCESSED_UICS_FILE, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-
-        missing_to_append = []
-        for line in lines:
-            val = line.strip()
-            val_clean = "".join(filter(str.isdigit, val))
-            
-            if val_clean and len(val_clean) >= 9 and val_clean not in extracted_uics:
-                missing_to_append.append(val_clean)
-                extracted_uics.add(val_clean)
-                missing_count += 1
-
-        if missing_to_append:
-            with open(OUTPUT_FILE, "a", encoding="utf-8") as f:
-                for val in missing_to_append:
-                    f.write(f"{val}\n")
-            log_msg(f"[SYNC] Добавени {missing_count} липсващи ЕИК от processed_uics_registry.txt.")
-            
-    except Exception as e:
-        log_msg(f"[SYNC ERROR] Грешка при синхронизация: {repr(e)}")
-
-
-# ============================================================
-# PROCESSED QUERIES
-# ============================================================
-
-def load_processed_queries():
-    processed_queries = set()
-
-    if os.path.exists(QUERIES_MEMORY_FILE):
-
-        with open(
-            QUERIES_MEMORY_FILE,
-            "r",
-            encoding="utf-8"
-        ) as f:
-
-            for line in f:
-
-                value = line.strip()
-
-                if value:
-                    processed_queries.add(value)
-
-    return processed_queries
-
-
-def mark_query_processed(query):
-    with open(
-        QUERIES_MEMORY_FILE,
-        "a",
-        encoding="utf-8"
-    ) as f:
-
-        f.write(
-            f"{query}\n"
-        )
-
-
-def mark_query_failed(query, reason):
-    timestamp = datetime.now().isoformat()
-
-    with open(
-        FAILED_QUERIES_FILE,
-        "a",
-        encoding="utf-8"
-    ) as f:
-
-        f.write(
-            f"{timestamp}\t{query}\t{reason}\n"
-        )
-
-
-# ============================================================
-# BROWSER FACTORY
-# ============================================================
-
-def create_browser(p):
-
-    browser = p.chromium.launch(
-        headless=True,
-        args=[
-            "--no-sandbox",
-            "--disable-dev-shm-usage",
-            "--disable-gpu",
-        ]
-    )
-
-    context = browser.new_context(
-        locale="bg-BG",
-        viewport={
-            "width": 1280,
-            "height": 720
-        }
-    )
-
-    page = context.new_page()
-
-    page.set_default_timeout(
-        SELECTOR_TIMEOUT
-    )
-
-    page.set_default_navigation_timeout(
-        PAGE_TIMEOUT
-    )
-
-    def on_page_error(error):
-        log_msg(
-            f"[PAGE ERROR] {error}"
-        )
-
-    def on_page_crash(_):
-        log_msg(
-            "[PAGE CRASH] Browser page reported a crash."
-        )
-
-    def on_request_failed(request):
-        try:
-            resource_type = request.resource_type
-
-            if resource_type in (
-                "document",
-                "xhr",
-                "fetch"
-            ):
-
-                log_msg(
-                    "[REQUEST FAILED] "
-                    f"{resource_type} | "
-                    f"{request.url} | "
-                    f"{request.failure}"
-                )
-
-        except Exception:
-            pass
-
-    def on_browser_disconnected():
-        log_msg(
-            "[BROWSER] Browser disconnected!"
-        )
-
-    page.on(
-        "pageerror",
-        on_page_error
-    )
-
-    page.on(
-        "crash",
-        on_page_crash
-    )
-
-    page.on(
-        "requestfailed",
-        on_request_failed
-    )
-
-    browser.on(
-        "disconnected",
-        on_browser_disconnected
-    )
-
-    log_msg(
-        "[BROWSER] Нов Chromium процес стартиран."
-    )
-
-    return browser, context, page
-
-
-# ============================================================
-# MAIN
-# ============================================================
 
 def main():
-
     clear_continuation_flag()
-    load_state()
-
-    heartbeat_thread = threading.Thread(
-        target=heartbeat_worker,
-        daemon=True
-    )
-
-    heartbeat_thread.start()
-
-    extracted_uics = load_uics()
+    base_url = "https://portal.registryagency.bg/CR/Reports/ActiveConditionTabResult?uic="
     
-    # Първоначална синхронизация при стартиране
-    sync_missing_eiks(extracted_uics)
+    processed_uics = load_memory()
+    log_msg(f"[СТАРТ] Възстановяване на сесията... Кеширани записи до момента: {len(processed_uics)}")
 
-    state["total_uics"] = len(
-        extracted_uics
-    )
+    session_extracted_count = 0  # Брояч за текущата сесия (колко НОВИ сме източили сега)
 
-    log_msg(
-        f"[INFO] Заредени от базата: "
-        f"{len(extracted_uics)} ЕИК."
-    )
-
-    processed_queries = load_processed_queries()
-
-    log_msg(
-        f"[INFO] Завършени комбинации: "
-        f"{len(processed_queries)}."
-    )
-
-    # --------------------------------------------------------
-    # QUERY MATRIX
-    # --------------------------------------------------------
-
-    bg_alphabet = [
-        chr(i)
-        for i in range(1040, 1072)
+    fieldnames = [
+        "UIC_Query", "URL", "Заглавие (Статус)", "Състояние към дата",
+        "ЕИК/ПИК", "Фирмено дело", "Фирма/Наименование", "Правна форма",
+        "Държава", "Област и Община", "Населено място", "Адрес",
+        "Предмет на дейност", "Физическо лице", "Other_Data" 
     ]
 
-    en_alphabet = [
-        chr(i)
-        for i in range(65, 91)
-    ]
+    label_map = {
+        "1. UIC/PIC": "1. ЕИК/ПИК", "1. ЕИК/ПИК": "1. ЕИК/ПИК",
+        "2. Company/Name": "2. Фирма/Наименование", "2. Фирма/Наименование": "2. Фирма/Наименование",
+        "3. Legal form": "3. Правна форма", "3. Правна форма": "3. Правна форма",
+        "5. Head office and registered office": "5. Седалище и адрес на управление", "5. Седалище и адрес на управление": "5. Седалище и адрес на управление",
+        "6. Scope of business activity": "6. Предмет на дейност", "6. Предмет на дейност": "6. Предмет на дейност",
+        "18. Natural person - trader": "18. Физическо лице - търговец", "18. Физическо лице - търговец": "18. Физическо лице - търговец"
+    }
 
-    digits = [
-        str(i)
-        for i in range(10)
-    ]
+    # Първоначална инициализация на първия валиден файл
+    current_csv_file = get_active_csv_path(output_dir)
+    if not os.path.exists(current_csv_file):
+        with open(current_csv_file, mode='w', newline='', encoding='utf-8-sig') as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
+            writer.writeheader()
 
-    all_chars = (
-        bg_alphabet +
-        en_alphabet +
-        digits
-    )
+    csv_args = (fieldnames, label_map)
 
-    single_chars = all_chars
+    # Зареждаме приоритетния списък (ако го има)
+    priority_uics = []
+    if os.path.exists(PRIORITY_LIST_FILE):
+        with open(PRIORITY_LIST_FILE, 'r', encoding='utf-8') as f:
+            for line in f:
+                val = line.strip()
+                if val:
+                    priority_uics.append(val)
+        log_msg(f"[ИНФО] Зареден списък с {len(priority_uics)} гарантирани ЕИК номера.")
 
-    double_chars = [
-        a + b
-        for a in all_chars
-        for b in all_chars
-    ]
+    with sync_playwright() as p:
+        browser = p.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
+        )
+        context = browser.new_context(
+            locale='bg-BG',
+            extra_http_headers={'Accept-Language': 'bg-BG,bg;q=0.9'},
+            viewport={'width': 1920, 'height': 1080}
+        )
+        page = context.new_page()
 
-    bg_triples = [
-        a + b + c
-        for a in bg_alphabet
-        for b in bg_alphabet
-        for c in bg_alphabet
-    ]
-
-    bg_double_digit = [
-        a + b + c
-        for a in bg_alphabet
-        for b in bg_alphabet
-        for c in digits
-    ]
-
-    bg_double_letter_double_digit = [
-        a + b + c + d
-        for a in bg_alphabet
-        for b in bg_alphabet
-        for c in digits
-        for d in digits
-    ]
-
-    en_triples = [
-        a + b + c
-        for a in en_alphabet
-        for b in en_alphabet
-        for c in en_alphabet
-    ]
-
-    en_double_digit = [
-        a + b + c
-        for a in en_alphabet
-        for b in en_alphabet
-        for c in digits
-    ]
-
-    digit_triples = [
-        a + b + c
-        for a in digits
-        for b in digits
-        for c in digits
-    ]
-
-    digit_quads = [
-        f"{i:04d}"
-        for i in range(10000)
-    ]
-
-    common_keywords = [
-        "ЕООД", "ООД", "АД", "ЕАД", "ЕТ", "КЧТ", "ДЗЗД", "СД", "КД",
-        "ГРУП", "GROUP", "ИНВЕСТ", "INVEST", "СТРОЙ", "STROY",
-        "ТРАНС", "TRANS", "ТРЕЙД", "TRADE", "АУТО", "AUTO",
-        "КОМЕРС", "БГ", "BG", "БЪЛГАРИЯ", "BULGARIA", "КОНСУЛТ",
-        "CONSULT", "ПРОДЖЕКТ", "PROJECT", "ИМОТ", "ИМОТИ",
-        "МЕДИКА", "ФАРМА", "ИВАН", "ПЕТЪР", "ГЕОРГИ", "ДИМИТЪР",
-        "НИКОЛАЙ", "ХРИСТО", "МАРИЯ", "ЕЛЕНА", "СОФИЯ", "ВАРНА",
-        "ПЛОВДИВ", "БУРГАС", "РУСЕ", "КОМПАНИ", "ПАРТНЪРС", 
-        "ПРОПЪРТИ", "ПРОПЪРТИС", "СЕКЮРИТИ", "СЕРВИЗ", "УСЛУГИ", 
-        "ЛОДЖИСТИК", "ФИНАНС", "АГРО", "ТЕХ", "ЕЛЕКТРО", "МЕДИКАЛ",
-        "ДЕНТАЛ", "МЕД", "БИЛДИНГ", "БИЛД", "АРХ", "АРХИТЕКТУРА", 
-        "ДИЗАЙН", "МАРКЕТИНГ", "МЕНИДЖМЪНТ", "ЕКСПЕРТ", "АУДИТ", 
-        "ПЛЮС", "ИНТЕРНЕШЪНЪЛ", "ГЛОБАЛ", "ЕВРОПА", "ЕВРО", "ИМПЕКС", 
-        "ЕКО", "БИО", "МЕГА", "МАКС", "МИНИ", "СУПЕР", "АЛФА", 
-        "БЕТА", "ОМЕГА", "ВИП", "ПРО", "ИНЖЕНЕРИНГ", "СИСТЕМС", 
-        "ХОЛДИНГ", "АКАДЕМИЯ", "ЦЕНТЪР", "КЛИНИК", "ИМПЕРИАЛ",
-        "КАПИТАЛ", "ИДЕЯ", "ВИЖЪН", "СОЛЮШЪНС", "ФАМИЛИЯ", 
-        "БРАДЪРС", "СЪНС", "НЮ", "АРТ", "СТАРА ЗАГОРА", "ПЛЕВЕН", 
-        "ДОБРИЧ", "СЛИВЕН", "ШУМЕН", "БЛАГОЕВГРАД", "ВЕЛИКО ТЪРНОВО", 
-        "ХАСКОВО", "ЯМБОЛ", "ПАЗАРДЖИК", "АЛЕКСАНДЪР", "СТЕФАН", 
-        "ЙОРДАН", "ВАСИЛ", "ТОДОР", "АНТОН", "БОРИС", "ВИКТОР", 
-        "СВЕТЛА", "ДЕСИСЛАВА", "РАДОСТИНА", "МИЛЕНА", "ИВАНОВ", 
-        "ГЕОРГИЕВ", "ДИМИТРОВ", "ПЕТРОВ", "НИКОЛОВ", "ЦВЕТКОВ",
-        "АГРИКУЛТУРА", "ЛОГИСТИКА", "ИНФРАСТРУКТУРА", "ЕНЕРДЖИ", 
-        "СОЛАР", "ИНОВЕЙШЪНС"
-    ]
-
-    years = [str(y) for y in range(1990, datetime.now().year + 2)]
-    bg_keyword_years = [
-        f"{kw} {year}" 
-        for kw in ["БГ", "БЪЛГАРИЯ", "ГРУП", "КОМЕРС", "ЕООД", "ООД", "ТРАНС", "СТРОЙ"] 
-        for year in years
-    ]
-
-    search_queries_raw = (
-        single_chars +
-        double_chars +
-        bg_triples +
-        bg_double_digit +
-        bg_double_letter_double_digit +
-        en_triples +
-        en_double_digit +
-        digit_triples +
-        digit_quads +
-        common_keywords +
-        bg_keyword_years
-    )
-
-    search_queries = list(dict.fromkeys(search_queries_raw))
-
-    log_msg(
-        f"[INFO] Общо комбинации: "
-        f"{len(search_queries)}"
-    )
-
-    browser = None
-    context = None
-    page = None
-
-    try:
-
-        with sync_playwright() as p:
-
-            browser, context, page = create_browser(p)
-
-            while (
-                state["query_idx"]
-                < len(search_queries)
-            ):
-
-                # Периодична синхронизация на всеки 10 итерации
-                if state["query_idx"] % 10 == 0:
-                    sync_missing_eiks(extracted_uics)
-                    state["total_uics"] = len(extracted_uics)
-
-                # ------------------------------------------------
-                # TIME LIMIT
-                # ------------------------------------------------
-
+        # ========================================================
+        # ФАЗА 1: Приоритетен списък + Съседни ЕИК номера (Квартал)
+        # ========================================================
+        if priority_uics and state["priority_index"] < len(priority_uics):
+            log_msg(f"[ФАЗА 1] Старт на Квартално сканиране (започваме от индекс {state['priority_index']} / {len(priority_uics)})...")
+            
+            for idx in range(state["priority_index"], len(priority_uics)):
+                base_uic = priority_uics[idx]
+                
                 if time_limit_reached():
-
-                    log_msg(
-                        "[TIME LIMIT] "
-                        "Стигнахме вътрешния лимит."
-                    )
-
-                    state["status"] = "time_limit"
-
-                    save_state(
-                        reason="time_limit"
-                    )
-
+                    log_msg(f"[ВРЕМЕТО ИЗТЕЧЕ] Спираме Фаза 1. Общо източени нови фирми тази сесия: {session_extracted_count}")
+                    state["priority_index"] = idx
+                    save_state()
                     flag_for_continuation()
-
-                    break
-
-                # ------------------------------------------------
-                # QUERY
-                # ------------------------------------------------
-
-                query = search_queries[
-                    state["query_idx"]
-                ]
-
-                state["query"] = query
-                state["page_num"] = 0
-                state["status"] = "starting_query"
-
-                save_state(
-                    reason="query_start"
-                )
-
-                if query in processed_queries:
-
-                    log_msg(
-                        f"[SKIP] '{query}' вече е обработен."
-                    )
-
-                    state["query_idx"] += 1
-
-                    continue
-
-                encoded_query = (
-                    urllib.parse.quote(query)
-                )
-
-                url = (
-                    "https://portal.registryagency.bg/"
-                    "CR/Reports/VerificationPersonOrg"
-                    f"?name={encoded_query}"
-                    "&selectedSearchFilter=1"
-                )
-
-                state["last_url"] = url
-                state["status"] = "loading_query"
-
-                retry_count = 0
-
-                query_finished = False
-
-                while (
-                    retry_count <
-                    MAX_QUERY_RETRIES
-                    and not query_finished
-                ):
-
-                    try:
-
-                        retry_count += 1
-
-                        log_msg(
-                            f"[QUERY] "
-                            f"'{query}' "
-                            f"(опит {retry_count}/"
-                            f"{MAX_QUERY_RETRIES})"
-                        )
-
-                        # ----------------------------------------
-                        # NEW PAGE
-                        # ----------------------------------------
-
-                        if page is None:
-
-                            browser, context, page = \
-                                create_browser(p)
-
-                        state["status"] = \
-                            "goto"
-
-                        state["last_url"] = url
-
-                        page.goto(
-                            url,
-                            wait_until="domcontentloaded",
-                            timeout=PAGE_TIMEOUT
-                        )
-
-                        touch_state()
-
-                        # Give SPA time to render.
-                        page.wait_for_timeout(
-                            1500
-                        )
-
-                        if is_rate_limited(page):
-
-                            raise RuntimeError(
-                                "RATE_LIMIT"
-                            )
-
-                        # ----------------------------------------
-                        # WAIT FOR RESULTS
-                        # ----------------------------------------
-
-                        try:
-
-                            page.wait_for_selector(
-                                "table.table-collapsible "
-                                "tbody tr",
-                                timeout=SELECTOR_TIMEOUT
-                            )
-
-                        except PlaywrightTimeoutError:
-
-                            if is_rate_limited(page):
-
-                                raise RuntimeError(
-                                    "RATE_LIMIT"
-                                )
-
-                            # No table may simply mean no results.
-                            log_msg(
-                                f"[{query}] "
-                                "Няма резултати."
-                            )
-
-                            mark_query_processed(
-                                query
-                            )
-
-                            processed_queries.add(
-                                query
-                            )
-
-                            state["status"] = \
-                                "query_empty"
-
-                            state["query_idx"] += 1
-
-                            save_state(
-                                reason="empty_query"
-                            )
-
-                            query_finished = True
-
-                            break
-
-                        # ----------------------------------------
-                        # PAGINATION
-                        # ----------------------------------------
-
-                        page_num = 1
-
-                        while True:
-
-                            if time_limit_reached():
-
-                                log_msg(
-                                    "[TIME LIMIT] "
-                                    f"Спиране при "
-                                    f"query='{query}', "
-                                    f"page={page_num}"
-                                )
-
-                                state["page_num"] = \
-                                    page_num
-
-                                state["status"] = \
-                                    "time_limit_pagination"
-
-                                save_state(
-                                    reason="time_limit_pagination"
-                                )
-
-                                flag_for_continuation()
-
-                                try:
-                                    browser.close()
-                                except Exception:
-                                    pass
-
-                                return
-
-                            # ------------------------------------
-                            # UPDATE STATE
-                            # ------------------------------------
-
-                            state["query"] = query
-                            state["page_num"] = page_num
-                            state["status"] = \
-                                "extracting"
-
-                            state["last_url"] = \
-                                page.url
-
-                            touch_state()
-
-                            # ------------------------------------
-                            # RATE LIMIT
-                            # ------------------------------------
-
-                            if is_rate_limited(page):
-
-                                raise RuntimeError(
-                                    "RATE_LIMIT"
-                                )
-
-                            # ------------------------------------
-                            # EXTRACT
-                            # ------------------------------------
-
-                            rows = page.locator(
-                                "table.table-collapsible "
-                                "tbody tr"
-                                ":not(.collapsible-row)"
-                            ).all()
-
-                            new_uics = 0
-
-                            for row in rows:
-
-                                try:
-
-                                    cols = row.locator(
-                                        "td"
-                                    ).all()
-
-                                    if len(cols) < 3:
-                                        continue
-
-                                    uic_text = (
-                                        cols[2]
-                                        .locator(
-                                            "p.field-text"
-                                        )
-                                        .inner_text()
-                                        .strip()
-                                    )
-
-                                    uic_clean = "".join(
-                                        filter(
-                                            str.isdigit,
-                                            uic_text
-                                        )
-                                    )
-
-                                    if (
-                                        len(uic_clean) >= 9
-                                        and
-                                        uic_clean
-                                        not in extracted_uics
-                                    ):
-
-                                        with open(
-                                            OUTPUT_FILE,
-                                            "a",
-                                            encoding="utf-8"
-                                        ) as f:
-
-                                            f.write(
-                                                f"{uic_clean}\n"
-                                            )
-
-                                        extracted_uics.add(
-                                            uic_clean
-                                        )
-
-                                        new_uics += 1
-
-                                except Exception as row_error:
-
-                                    log_msg(
-                                        "[ROW ERROR] "
-                                        f"{repr(row_error)}"
-                                    )
-
-                            state["total_uics"] = \
-                                len(extracted_uics)
-
-                            state["last_new_uics"] = \
-                                new_uics
-
-                            state["status"] = \
-                                "page_complete"
-
-                            touch_state()
-
-                            save_state(
-                                reason="page_complete"
-                            )
-
-                            log_msg(
-                                f"[{query} - Стр {page_num}] "
-                                f"Извлечени. "
-                                f"Нови: {new_uics}. "
-                                f"Общо: "
-                                f"{len(extracted_uics)}"
-                            )
-
-                            # ------------------------------------
-                            # NEXT PAGE
-                            # ------------------------------------
-
-                            next_btn = page.locator(
-                                "li.page-item.next"
-                                ":not(.disabled) a"
-                            ).first
-
-                            next_exists = (
-                                next_btn.count() > 0
-                            )
-
-                            if (
-                                next_exists
-                                and
-                                next_btn.is_visible(
-                                    timeout=2000
-                                )
-                            ):
-
-                                state["status"] = \
-                                    "clicking_next"
-
-                                next_btn.click(
-                                    timeout=5000
-                                )
-
-                                page_num += 1
-
-                                state["page_num"] = \
-                                    page_num
-
-                                touch_state()
-
-                                # Small wait for SPA update.
-                                page.wait_for_timeout(
-                                    1000
-                                )
-
-                                try:
-
-                                    page.wait_for_selector(
-                                        "table.table-collapsible "
-                                        "tbody tr",
-                                        state="attached",
-                                        timeout=SELECTOR_TIMEOUT
-                                    )
-
-                                except PlaywrightTimeoutError:
-
-                                    log_msg(
-                                        "[PAGINATION] "
-                                        "Table did not appear "
-                                        "after next click."
-                                    )
-
-                                continue
-
-                            # ------------------------------------
-                            # QUERY FINISHED
-                            # ------------------------------------
-
-                            log_msg(
-                                f"[SUCCESS] "
-                                f"Комбинацията '{query}' "
-                                f"е напълно източена."
-                            )
-
-                            mark_query_processed(
-                                query
-                            )
-
-                            processed_queries.add(
-                                query
-                            )
-
-                            state["status"] = \
-                                "query_complete"
-
-                            state["query_idx"] += 1
-                            state["page_num"] = page_num
-
-                            save_state(
-                                reason="query_complete"
-                            )
-
-                            query_finished = True
-
-                            break
-
-                    except Exception as e:
-
-                        save_exception(
-                            f"query={query}, "
-                            f"retry={retry_count}",
-                            e
-                        )
-
-                        save_debug_artifacts(
-                            page,
-                            f"{query}_retry{retry_count}"
-                        )
-
-                        log_msg(
-                            f"[EXCEPTION] "
-                            f"query='{query}' | "
-                            f"page={state['page_num']} | "
-                            f"retry={retry_count} | "
-                            f"{repr(e)}"
-                        )
-
-                        log_msg(
-                            "[TRACEBACK]\n"
-                            + traceback.format_exc()
-                        )
-
-                        # ----------------------------------------
-                        # RATE LIMIT
-                        # ----------------------------------------
-
-                        if is_rate_limited(
-                            page,
-                            e
-                        ):
-
-                            state["status"] = \
-                                "rate_limited"
-
-                            save_state(
-                                reason="rate_limit"
-                            )
-
-                            backoff_index = min(
-                                retry_count - 1,
-                                len(RATE_LIMIT_BACKOFFS) - 1
-                            )
-
-                            sleep_seconds = \
-                                RATE_LIMIT_BACKOFFS[
-                                    backoff_index
-                                ]
-
-                            log_msg(
-                                "[RATE LIMIT] "
-                                f"Чакаме "
-                                f"{sleep_seconds}s..."
-                            )
-
-                            try:
-                                browser.close()
-                            except Exception:
-                                pass
-
-                            browser = None
-                            context = None
-                            page = None
-
-                            time.sleep(
-                                sleep_seconds
-                            )
-
-                            log_msg(
-                                "[RATE LIMIT] "
-                                "Стартираме чист browser."
-                            )
-
-                            browser, context, page = \
-                                create_browser(p)
-
-                            continue
-
-                        # ----------------------------------------
-                        # OTHER ERROR
-                        # ----------------------------------------
-
-                        state["status"] = \
-                            "generic_error"
-
-                        save_state(
-                            reason="generic_error"
-                        )
-
-                        try:
-                            browser.close()
-                        except Exception:
-                            pass
-
-                        browser = None
-                        context = None
-                        page = None
-
-                        if retry_count < MAX_QUERY_RETRIES:
-
-                            sleep_seconds = \
-                                retry_count * 10
-
-                            log_msg(
-                                "[RETRY] "
-                                f"Чакаме "
-                                f"{sleep_seconds}s "
-                                "и опитваме същия query."
-                            )
-
-                            time.sleep(
-                                sleep_seconds
-                            )
-
-                            browser, context, page = \
-                                create_browser(p)
-
-                            continue
-
-                        # ----------------------------------------
-                        # GIVE UP AFTER RETRIES
-                        # ----------------------------------------
-
-                        log_msg(
-                            f"[FAILED] "
-                            f"'{query}' "
-                            f"се провали след "
-                            f"{MAX_QUERY_RETRIES} опита."
-                        )
-
-                        mark_query_failed(
-                            query,
-                            repr(e)
-                        )
-
-                        state["query_idx"] += 1
-
-                        state["status"] = \
-                            "query_failed"
-
-                        save_state(
-                            reason="query_failed"
-                        )
-
-                        query_finished = True
-
-                # END RETRY LOOP
-
-            # END QUERY LOOP
-
-            if (
-                state["query_idx"]
-                >= len(search_queries)
-            ):
-
-                state["status"] = \
-                    "all_queries_complete"
-
-                save_state(
-                    reason="all_queries_complete"
-                )
-
-                clear_continuation_flag()
-
-                log_msg(
-                    "[КРАЙ] "
-                    "Всички комбинации са обработени."
-                )
-
-    except SystemExit:
-        raise
-
-    except Exception as e:
-
-        log_msg(
-            f"[FATAL] "
-            f"{repr(e)}"
-        )
-
-        log_msg(
-            "[FATAL TRACEBACK]\n"
-            + traceback.format_exc()
-        )
-
-        save_exception(
-            "FATAL",
-            e
-        )
-
-        save_debug_artifacts(
-            page,
-            "fatal"
-        )
-
-        state["status"] = \
-            "fatal_error"
-
-        save_state(
-            reason="fatal_error"
-        )
-
-        flag_for_continuation()
-
-        raise
-
-    finally:
-
-        _heartbeat_stop.set()
-
-        try:
-
-            if browser:
-                browser.close()
-
-        except Exception:
-            pass
-
-        save_state(
-            reason="finally"
-        )
-
+                    browser.close()
+                    return
+
+                # Генерираме "Квартала": базовия номер + 30 надолу и 30 нагоре
+                base_num = int(base_uic)
+                neighborhood = []
+                for n in range(max(0, base_num - 30), base_num + 31):
+                    n_str = f"{n:09d}"
+                    if is_valid_eik(n_str):
+                        neighborhood.append(n_str)
+                
+                scraped_count = 0
+                empty_count = 0
+                skipped_count = 0
+
+                log_msg(f"[КВАРТАЛ] Базов ЕИК: {base_uic} | Валидни съседи за проверка: {len(neighborhood)}")
+                
+                for neighbor_uic in neighborhood:
+                    if time_limit_reached():
+                        log_msg(f"[ВРЕМЕТО ИЗТЕЧЕ] Спираме Фаза 1. Общо източени нови фирми тази сесия: {session_extracted_count}")
+                        state["priority_index"] = idx
+                        save_state()
+                        flag_for_continuation()
+                        browser.close()
+                        return
+                        
+                    status, name_or_err = scrape_company(neighbor_uic, page, base_url, processed_uics, csv_args)
+                    
+                    if status == "SUCCESS":
+                        scraped_count += 1
+                        session_extracted_count += 1
+                        log_msg(f"  -> [УСПЕХ] {neighbor_uic} : {name_or_err}")
+                    elif status == "EMPTY":
+                        empty_count += 1
+                    elif status == "SKIPPED":
+                        skipped_count += 1
+                    elif status == "ERROR":
+                        log_msg(f"  -> [ГРЕШКА] {neighbor_uic} : {name_or_err}")
+
+                log_msg(f"[РЕЗЮМЕ КВАРТАЛ] {base_uic} завършен. Нови: {scraped_count} | Празни: {empty_count} | Прескочени: {skipped_count}\n")
+                    
+                # Запазваме прогреса на всеки изчистен базов номер
+                state["priority_index"] = idx + 1
+                save_state()
+
+        # Когато приключим изцяло с Фаза 1, маркираме я като приключена
+        if priority_uics:
+            state["priority_index"] = len(priority_uics)
+            save_state()
+
+        # ========================================================
+        # ФАЗА 2: Класически последователен скенер (Брутфорс)
+        # ========================================================
+        log_msg(f"[ФАЗА 2] Старт на последователно сканиране от ЕИК {state['current_index']:09d} нагоре...")
+        
+        for i in range(state['current_index'], 10000000000):
+            if time_limit_reached():
+                log_msg(f"[ВРЕМЕТО ИЗТЕЧЕ] Спираме Фаза 2. Общо източени нови фирми тази сесия: {session_extracted_count}")
+                state["current_index"] = i
+                save_state()
+                flag_for_continuation()
+                break
+
+            uic_str = f"{i:09d}"
+            
+            if not is_valid_eik(uic_str):
+                if i % 1000 == 0:
+                    log_msg(f"[ТЪРСЕНЕ] Стигнахме до номер: {uic_str}...")
+                continue
+            
+            status, name_or_err = scrape_company(uic_str, page, base_url, processed_uics, csv_args)
+            
+            if status == "SUCCESS":
+                session_extracted_count += 1
+                log_msg(f"[УСПЕХ ФАЗА 2] {uic_str} -> {name_or_err}")
+            elif status == "ERROR":
+                log_msg(f"[ГРЕШКА ФАЗА 2] {uic_str} -> {name_or_err}")
+
+            state["current_index"] = i + 1
+            save_state()
+        
+        browser.close()
+        log_msg(f"[КРАЙ] Скриптът приключи успешно. Общо източени нови фирми тази сесия: {session_extracted_count}")
 
 if __name__ == "__main__":
     main()
