@@ -12,6 +12,15 @@ if sys.stdout.encoding.lower() != 'utf-8':
     except AttributeError:
         pass
 
+# Увеличаваме драстично лимита за големина на поле в CSV, за да не гърми при гоуеми текстове
+maxInt = sys.maxsize
+while True:
+    try:
+        csv.field_size_limit(maxInt)
+        break
+    except OverflowError:
+        maxInt = int(maxInt/10)
+
 START_TIME = time.time()
 TIME_LIMIT_SECONDS = 5.4 * 60 * 60
 
@@ -34,6 +43,7 @@ def get_active_csv_path(directory, base_filename="registry_agency_data_mega"):
         part += 1
 
 memory_file_path = os.path.join(output_dir, 'processed_uics_registry.txt')
+empty_uics_file_path = os.path.join(output_dir, 'empty_uics_registry.txt')
 state_file = os.path.join(output_dir, "savegame_registry_agency.json")
 CONTINUE_FLAG_FILE = os.path.join(output_dir, "CONTINUE_FLAG_REGISTRY_AGENCY")
 PRIORITY_LIST_FILE = os.path.join(output_dir, "100_percent_valid_uics.txt")
@@ -45,10 +55,11 @@ def log_msg(msg):
 # ==========================================
 # МОДУЛ ЗА ОДИТ И СИНХРОНИЗАЦИЯ НА ПАМЕТТА
 # ==========================================
-def audit_and_sync_memory_with_csv(out_dir, mem_file):
-    log_msg("[АУДИТ] Започваме проверка за фалшиво отчетени като празни ЕИК номера...")
+def audit_and_sync_memory_with_csv(out_dir, mem_file, empty_file):
+    log_msg("[АУДИТ] Започваме сканиране и възстановяване на паметта от CSV файловете...")
     csv_uics = set()
     
+    # 1. Извличаме всички реално записани ЕИК номера от CSV файловете
     for file_name in os.listdir(out_dir):
         if file_name.startswith("registry_agency_data_mega") and file_name.endswith(".csv"):
             file_path = os.path.join(out_dir, file_name)
@@ -60,7 +71,20 @@ def audit_and_sync_memory_with_csv(out_dir, mem_file):
                             csv_uics.add(row["UIC_Query"])
             except Exception as e:
                 log_msg(f"[АУДИТ ГРЕШКА] Проблем при четене на {file_name}: {e}")
-                
+
+    # 2. Извличаме всички ЕИК номера, които са доказано празни (ако файлът съществува)
+    empty_uics = set()
+    if os.path.exists(empty_file):
+        with open(empty_file, "r", encoding="utf-8") as f:
+            for line in f:
+                uic = line.strip()
+                if uic:
+                    empty_uics.add(uic)
+                    
+    # 3. Обединяваме ги, за да получим пълната реална картина (Всичко, което наистина сме проверили)
+    real_processed = csv_uics.union(empty_uics)
+
+    # 4. Проверяваме какво е останало в старата памет
     memory_uics = set()
     if os.path.exists(mem_file):
         with open(mem_file, "r", encoding="utf-8") as f:
@@ -68,21 +92,23 @@ def audit_and_sync_memory_with_csv(out_dir, mem_file):
                 uic = line.strip()
                 if uic:
                     memory_uics.add(uic)
-                    
-    missing_in_csv = memory_uics - csv_uics
+
+    # Ако в паметта има номера, които ги няма НИТО в CSV, НИТО в списъка с празни, ги смятаме за фалшиви
+    missing_data = memory_uics - real_processed
     
-    if missing_in_csv:
-        log_msg(f"[АУДИТ] Намерени {len(missing_in_csv)} ЕИК номера в паметта, които липсват в CSV!")
-        log_msg("[АУДИТ] Премахваме ги от паметта, за да ги скрейпнеме наново и да прибереме данните.")
-        
-        valid_uics = memory_uics - missing_in_csv
-        with open(mem_file, "w", encoding="utf-8") as f:
-            for uic in valid_uics:
-                f.write(f"{uic}\n")
-        return valid_uics
-    else:
-        log_msg("[АУДИТ] Всичко е синхронизирано. Няма разминавания.")
-        return memory_uics
+    if missing_data:
+        log_msg(f"[АУДИТ] Намерени {len(missing_data)} ЕИК номера в паметта без покритие в данните.")
+        log_msg("[АУДИТ] Те ще бъдат премахнати, за да се скрейпнат отново.")
+    
+    if len(csv_uics) > 0:
+        log_msg(f"[АУДИТ] Успешно прочетени {len(csv_uics)} записа от CSV файловете.")
+
+    # 5. Презаписваме паметта с пълния набор от реални данни (Това ВЪЗСТАНОВЯВА изтритите 1.7 милиона)
+    with open(mem_file, "w", encoding="utf-8") as f:
+        for uic in real_processed:
+            f.write(f"{uic}\n")
+            
+    return real_processed
 
 # ==========================================
 # МОДУЛ ЦЕДКА ЗА ВАЛИДЕН ЕИК (БУЛСТАТ)
@@ -151,6 +177,10 @@ def save_to_memory(uic_str):
     with open(memory_file_path, 'a', encoding='utf-8') as f:
         f.write(f"{uic_str}\n")
 
+def save_to_empty(uic_str):
+    with open(empty_uics_file_path, 'a', encoding='utf-8') as f:
+        f.write(f"{uic_str}\n")
+
 # ==========================================
 # ИЗНЕСЕНА ЛОГИКА ЗА СКРЕЙПВАНЕ
 # ==========================================
@@ -177,6 +207,8 @@ def scrape_company(uic_str, page, base_url, processed_uics, csv_writer_args):
         heading_subtitle_loc = page.locator('.page-heading-sub-title')
 
         if heading_title_loc.count() == 0 and field_containers.count() == 0:
+            # Страницата е наистина празна. Записваме я в отделния файл и в паметта.
+            save_to_empty(uic_str)
             save_to_memory(uic_str)
             processed_uics.add(uic_str)
             return "EMPTY", ""
@@ -266,7 +298,7 @@ def main():
     clear_continuation_flag()
     base_url = "https://portal.registryagency.bg/CR/Reports/ActiveConditionTabResult?uic="
     
-    processed_uics = audit_and_sync_memory_with_csv(output_dir, memory_file_path)
+    processed_uics = audit_and_sync_memory_with_csv(output_dir, memory_file_path, empty_uics_file_path)
     log_msg(f"[СТАРТ] Възстановяване на сесията... Кеширани записи до момента: {len(processed_uics)}")
 
     session_extracted_count = 0
