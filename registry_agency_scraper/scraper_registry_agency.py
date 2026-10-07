@@ -23,14 +23,12 @@ except NameError:
 output_dir = os.path.join(base_dir, "registry_agency_outputs")
 os.makedirs(output_dir, exist_ok=True)
 
-# Новата логика за динамично генериране на файлове под 90MB
 def get_active_csv_path(directory, base_filename="registry_agency_data_mega"):
     part = 1
     while True:
         suffix = f"_part{part}" if part > 1 else ""
         file_path = os.path.join(directory, f"{base_filename}{suffix}.csv")
         
-        # Ако не съществува или е под ~90MB (94371840 bytes)
         if not os.path.exists(file_path) or os.path.getsize(file_path) < 94371840:
             return file_path
         part += 1
@@ -41,12 +39,53 @@ CONTINUE_FLAG_FILE = os.path.join(output_dir, "CONTINUE_FLAG_REGISTRY_AGENCY")
 PRIORITY_LIST_FILE = os.path.join(output_dir, "100_percent_valid_uics.txt")
 
 def log_msg(msg):
-    """Помощна функция за красиво принтиране с точен час."""
     current_time = datetime.now().strftime('%H:%M:%S')
     print(f"[{current_time}] {msg}", flush=True)
 
 # ==========================================
-# МОДУЛ 11 ЦЕДКА ЗА ВАЛИДЕН ЕИК (БУЛСТАТ)
+# МОДУЛ ЗА ОДИТ И СИНХРОНИЗАЦИЯ НА ПАМЕТТА
+# ==========================================
+def audit_and_sync_memory_with_csv(out_dir, mem_file):
+    log_msg("[АУДИТ] Започваме проверка за фалшиво отчетени като празни ЕИК номера...")
+    csv_uics = set()
+    
+    for file_name in os.listdir(out_dir):
+        if file_name.startswith("registry_agency_data_mega") and file_name.endswith(".csv"):
+            file_path = os.path.join(out_dir, file_name)
+            try:
+                with open(file_path, mode='r', encoding='utf-8-sig') as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        if "UIC_Query" in row:
+                            csv_uics.add(row["UIC_Query"])
+            except Exception as e:
+                log_msg(f"[АУДИТ ГРЕШКА] Проблем при четене на {file_name}: {e}")
+                
+    memory_uics = set()
+    if os.path.exists(mem_file):
+        with open(mem_file, "r", encoding="utf-8") as f:
+            for line in f:
+                uic = line.strip()
+                if uic:
+                    memory_uics.add(uic)
+                    
+    missing_in_csv = memory_uics - csv_uics
+    
+    if missing_in_csv:
+        log_msg(f"[АУДИТ] Намерени {len(missing_in_csv)} ЕИК номера в паметта, които липсват в CSV!")
+        log_msg("[АУДИТ] Премахваме ги от паметта, за да ги скрейпнеме наново и да прибереме данните.")
+        
+        valid_uics = memory_uics - missing_in_csv
+        with open(mem_file, "w", encoding="utf-8") as f:
+            for uic in valid_uics:
+                f.write(f"{uic}\n")
+        return valid_uics
+    else:
+        log_msg("[АУДИТ] Всичко е синхронизирано. Няма разминавания.")
+        return memory_uics
+
+# ==========================================
+# МОДУЛ ЦЕДКА ЗА ВАЛИДЕН ЕИК (БУЛСТАТ)
 # ==========================================
 def is_valid_eik(eik: str) -> bool:
     if len(eik) != 9 or not eik.isdigit():
@@ -62,7 +101,6 @@ def is_valid_eik(eik: str) -> bool:
     if rem2 != 10:
         return rem2 == int(eik[8])
     return int(eik[8]) == 0
-# ==========================================
 
 def time_limit_reached():
     return (time.time() - START_TIME) >= TIME_LIMIT_SECONDS
@@ -109,14 +147,6 @@ def save_state():
     except Exception:
         pass
 
-def load_memory():
-    processed = set()
-    if os.path.exists(memory_file_path):
-        with open(memory_file_path, "r", encoding="utf-8") as f:
-            for line in f:
-                processed.add(line.strip())
-    return processed
-
 def save_to_memory(uic_str):
     with open(memory_file_path, 'a', encoding='utf-8') as f:
         f.write(f"{uic_str}\n")
@@ -125,7 +155,6 @@ def save_to_memory(uic_str):
 # ИЗНЕСЕНА ЛОГИКА ЗА СКРЕЙПВАНЕ
 # ==========================================
 def scrape_company(uic_str, page, base_url, processed_uics, csv_writer_args):
-    """Скрейпва даден ЕИК. Връща (статус, име_на_фирма_или_грешка)."""
     if uic_str in processed_uics:
         return "SKIPPED", ""
 
@@ -133,18 +162,20 @@ def scrape_company(uic_str, page, base_url, processed_uics, csv_writer_args):
     fieldnames, label_map = csv_writer_args
 
     try:
-        page.goto(target_url, wait_until='domcontentloaded', timeout=15000)
+        page.goto(target_url, wait_until='domcontentloaded', timeout=6666)
         
         try:
-            page.wait_for_selector('.page-heading', timeout=1500)
+            page.wait_for_selector('.field-container', timeout=3333)
         except Exception:
-            pass
+            try:
+                page.wait_for_selector('.page-heading', timeout=1000)
+            except Exception:
+                pass
 
         field_containers = page.locator('.field-container')
         heading_title_loc = page.locator('.page-heading-title')
         heading_subtitle_loc = page.locator('.page-heading-sub-title')
 
-        # Ако страницата е празна (няма такава фирма)
         if heading_title_loc.count() == 0 and field_containers.count() == 0:
             save_to_memory(uic_str)
             processed_uics.add(uic_str)
@@ -212,7 +243,6 @@ def scrape_company(uic_str, page, base_url, processed_uics, csv_writer_args):
         if other_data:
             row_data["Other_Data"] = json.dumps(other_data, ensure_ascii=False)
 
-        # РАЗБИРААЙ - тука вземаме актуалния файл, за да не се прецакаме с размера
         current_csv_file = get_active_csv_path(output_dir)
         file_exists = os.path.exists(current_csv_file)
 
@@ -225,7 +255,6 @@ def scrape_company(uic_str, page, base_url, processed_uics, csv_writer_args):
         save_to_memory(uic_str)
         processed_uics.add(uic_str)
         
-        # Опитваме се да извадим името за лога
         company_name = row_data.get("Заглавие (Статус)", row_data.get("Фирма/Наименование", "Неизвестно име"))
         return "SUCCESS", company_name
 
@@ -237,10 +266,10 @@ def main():
     clear_continuation_flag()
     base_url = "https://portal.registryagency.bg/CR/Reports/ActiveConditionTabResult?uic="
     
-    processed_uics = load_memory()
+    processed_uics = audit_and_sync_memory_with_csv(output_dir, memory_file_path)
     log_msg(f"[СТАРТ] Възстановяване на сесията... Кеширани записи до момента: {len(processed_uics)}")
 
-    session_extracted_count = 0  # Брояч за текущата сесия (колко НОВИ сме източили сега)
+    session_extracted_count = 0
 
     fieldnames = [
         "UIC_Query", "URL", "Заглавие (Статус)", "Състояние към дата",
@@ -258,7 +287,6 @@ def main():
         "18. Natural person - trader": "18. Физическо лице - търговец", "18. Физическо лице - търговец": "18. Физическо лице - търговец"
     }
 
-    # Първоначална инициализация на първия валиден файл
     current_csv_file = get_active_csv_path(output_dir)
     if not os.path.exists(current_csv_file):
         with open(current_csv_file, mode='w', newline='', encoding='utf-8-sig') as f:
@@ -267,7 +295,6 @@ def main():
 
     csv_args = (fieldnames, label_map)
 
-    # Зареждаме приоритетния списък (ако го има)
     priority_uics = []
     if os.path.exists(PRIORITY_LIST_FILE):
         with open(PRIORITY_LIST_FILE, 'r', encoding='utf-8') as f:
@@ -289,9 +316,6 @@ def main():
         )
         page = context.new_page()
 
-        # ========================================================
-        # ФАЗА 1: Приоритетен списък + Съседни ЕИК номера (Квартал)
-        # ========================================================
         if priority_uics and state["priority_index"] < len(priority_uics):
             log_msg(f"[ФАЗА 1] Старт на Квартално сканиране (започваме от индекс {state['priority_index']} / {len(priority_uics)})...")
             
@@ -306,7 +330,6 @@ def main():
                     browser.close()
                     return
 
-                # Генерираме "Квартала": базовия номер + 30 надолу и 30 нагоре
                 base_num = int(base_uic)
                 neighborhood = []
                 for n in range(max(0, base_num - 30), base_num + 31):
@@ -344,18 +367,13 @@ def main():
 
                 log_msg(f"[РЕЗЮМЕ КВАРТАЛ] {base_uic} завършен. Нови: {scraped_count} | Празни: {empty_count} | Прескочени: {skipped_count}\n")
                     
-                # Запазваме прогреса на всеки изчистен базов номер
                 state["priority_index"] = idx + 1
                 save_state()
 
-        # Когато приключим изцяло с Фаза 1, маркираме я като приключена
         if priority_uics:
             state["priority_index"] = len(priority_uics)
             save_state()
 
-        # ========================================================
-        # ФАЗА 2: Класически последователен скенер (Брутфорс)
-        # ========================================================
         log_msg(f"[ФАЗА 2] Старт на последователно сканиране от ЕИК {state['current_index']:09d} нагоре...")
         
         for i in range(state['current_index'], 10000000000):
