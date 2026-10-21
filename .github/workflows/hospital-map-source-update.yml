@@ -17,6 +17,7 @@ on:
       - "hisbg_scraper/hisbg_outputs/hisbg_city_dump.xlsx"
       - "credoweb_scraper/credoweb_outputs/credoweb_doctors_full.csv"
       - "credoweb_scraper/credoweb_outputs/credoweb_hospitals_full.csv"
+      - "unconnected_datasets/standartized_medical_centres_and_types.csv"
   # Scraper commits made with GITHUB_TOKEN do not trigger on:push.
   # The local bridge checks configured source content before requesting a build.
   workflow_run:
@@ -43,6 +44,9 @@ concurrency:
 
 jobs:
   update-local-website:
+    # Only this trusted job may append local hospital names to the dictionary.
+    permissions:
+      contents: write
     if: >-
       github.repository == 'ChocoRamaBG/register-of-outpatient-care-facilities-and-hospices' &&
       ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
