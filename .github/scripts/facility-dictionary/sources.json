@@ -1,0 +1,75 @@
+{
+  "schema": 1,
+  "reference": "unconnected_datasets/standartized_medical_centres_and_types.csv",
+  "discover_outputs": true,
+  "collector": ".github/scripts/facility-dictionary/collect_facility_dictionary_names.py",
+  "inputs": [
+    {
+      "path": "blsbg_scraper/blsbg_outputs/bg_medics_dynamic_2029.xlsx",
+      "source": "blsbg",
+      "required": true,
+      "sheets": [
+        "Sheet1"
+      ]
+    },
+    {
+      "path": "hapchebg_scraper/hapchebg_outputs/hapchebg_data_mega.csv",
+      "source": "hapchebg",
+      "required": true
+    },
+    {
+      "path": "framar_scraper/framar_outputs/framar_doctors_full.csv",
+      "source": "framar",
+      "required": true
+    },
+    {
+      "path": "zdraveopazvane_scraper/zdraveopazvane_outputs/zdraveopazvane_doctors_full.csv",
+      "source": "zdraveopazvane",
+      "required": true
+    },
+    {
+      "path": "lekaribg_scraper/lekaribg_outputs/lekaribg_data_mega.csv",
+      "source": "lekaribg",
+      "required": true
+    },
+    {
+      "path": "zdraven_arhiv_scraper/zdraven_arhiv_outputs/zdraven_arhiv_data_mega.csv",
+      "source": "zdraven_arhiv",
+      "required": true
+    },
+    {
+      "path": "superdoc_scraper/superdoc_outputs/superdoc_data_mega.csv",
+      "source": "superdoc",
+      "required": true
+    },
+    {
+      "path": "hisbg_scraper/hisbg_outputs/HISBG_FINAL_DOCTORS_DATA.xlsx",
+      "source": "hisbg_final_staged",
+      "required": true,
+      "sheets": [
+        "Hospitals",
+        "Addresses",
+        "Doctors"
+      ],
+      "facility_sheets": [
+        "Hospitals"
+      ]
+    },
+    {
+      "path": "hisbg_scraper/hisbg_outputs/hisbg_city_dump.xlsx",
+      "source": "hisbg_city_staged",
+      "required": true
+    },
+    {
+      "path": "credoweb_scraper/credoweb_outputs/credoweb_doctors_full.csv",
+      "source": "credoweb_doctors",
+      "required": true
+    },
+    {
+      "path": "credoweb_scraper/credoweb_outputs/credoweb_hospitals_full.csv",
+      "source": "credoweb_hospitals",
+      "required": true,
+      "facility_table": true
+    }
+  ]
+}
