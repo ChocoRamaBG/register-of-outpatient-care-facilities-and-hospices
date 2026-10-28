@@ -1,8 +1,9 @@
-"""Append newly observed facility names to the manual dictionary, never decide them.
+"""Keep one review task per exact facility spelling and append newly observed names.
 
 The same functions serve local source refreshes and the repository workflow.
-Only explicit hospital/workplace columns are collected. Existing CSV bytes are
-preserved, and each new row contains the literal source name and two blank cells.
+Only explicit hospital/workplace columns are collected. Compatible duplicate
+rows reuse existing human decisions; conflicting decisions are retained for
+review. Unaffected CSV bytes stay intact and new rows have blank review cells.
 """
 from __future__ import annotations
 
@@ -18,6 +19,7 @@ import re
 import sys
 import tempfile
 import time
+import unicodedata
 from pathlib import Path
 
 CACHE_SCHEMA = 1
@@ -41,52 +43,176 @@ def file_sha256(path):
 
 
 def _read_reference_bytes(raw):
-    # Preserve bytes separately: parsing is only for validation and deduplication.
+    """Canonical three-cell rows, accepting the maintained and legacy headers."""
+    document = _reference_document(raw)
+    return [[row['raw'], row['name'], row['type']] for row in document['entries']]
+
+
+def raw_name_key(value):
+    """Match runtime exact_key: typography/case/spacing only, never fuzzy names."""
+    return ' '.join(unicodedata.normalize('NFKC', str(value or '')).split()).casefold()
+
+
+def _reference_document(raw):
     csv.field_size_limit(min(sys.maxsize, 2**31 - 1))
-    rows = list(csv.reader(io.StringIO(raw.decode("utf-8-sig"), newline="")))
-    if not rows or len(rows[0]) != 3 or any(
-        value.strip().casefold() not in allowed
-        for value, allowed in zip(rows[0], HEADER_OPTIONS)
-    ):
-        raise ValueError("The dictionary must have Raw Name, Final Name, Final Type in that order "
-                         "(the original longer header labels are also supported).")
-    if any(len(row) != 3 for row in rows):
-        raise ValueError("Every dictionary row must contain exactly three cells.")
-    return rows[1:]
+    text = raw.decode('utf-8-sig')
+    lines = io.StringIO(text, newline='').readlines()
+    reader = csv.reader(io.StringIO(text, newline=''), strict=True)
+    header = next(reader, [])
+    semantic = [next((index for index, allowed in enumerate(HEADER_OPTIONS)
+                      if raw_name_key(value) in allowed), None) for value in header]
+    if len(header) != 3 or set(semantic) != {0, 1, 2}:
+        raise ValueError('The dictionary needs exactly one Raw Name, Final Name and Final Type column '
+                         '(the original longer header labels are also supported).')
+    positions = [semantic.index(index) for index in range(3)]
+    previous_line = reader.line_num
+    header_text = ''.join(lines[:previous_line])
+    entries = []
+    for number, cells in enumerate(reader, 2):
+        first_line = previous_line + 1
+        row_text = ''.join(lines[previous_line:reader.line_num])
+        previous_line = reader.line_num
+        if cells and len(cells) != 3:
+            raise ValueError('Every dictionary row must contain exactly three cells.')
+        # Blank physical rows are kept verbatim and remain separate from any
+        # name task. Their presence must not corrupt later edit line references.
+        values = [cells[position] for position in positions] if cells else ['', '', '']
+        entries.append(dict(zip(('raw', 'name', 'type'), values), row=number,
+                            physicalLine=first_line, text=row_text, cells=cells))
+    return {'header': header, 'headerText': header_text, 'positions': positions,
+            'entries': entries, 'bom': raw.startswith(codecs.BOM_UTF8)}
+
+
+def dictionary_rows(raw):
+    """One logical task per exact raw key, with all original row/line evidence.
+
+    A missing cell cannot veto a completed duplicate. Distinct nonblank human
+    decisions remain explicit conflicts; neither is selected arbitrarily.
+    """
+    document = _reference_document(raw)
+    groups = {}
+    for entry in document['entries']:
+        # Keep malformed blank-name rows independent; never collapse unrelated
+        # absent names or disguise their existing validation problem.
+        key = raw_name_key(entry['raw']) or ('empty', entry['row'])
+        groups.setdefault(key, []).append(entry)
+    result = []
+    for members in groups.values():
+        values = {}
+        for field in ('name', 'type'):
+            unique = {}
+            for member in members:
+                value = member[field].strip()
+                if value:
+                    unique.setdefault(raw_name_key(value), value)
+            values[field] = list(unique.values())
+        conflicts = [field for field in ('name', 'type') if len(values[field]) > 1]
+        first = members[0]
+        result.append({'raw': first['raw'], 'name': values['name'][0] if len(values['name']) == 1 else '',
+                       'type': values['type'][0] if len(values['type']) == 1 else '',
+                       'row': first['row'], 'physicalLine': first['physicalLine'],
+                       'rows': [member['row'] for member in members],
+                       'physicalLines': [member['physicalLine'] for member in members],
+                       'conflict': bool(conflicts), 'conflictFields': conflicts,
+                       'nameValues': values['name'], 'typeValues': values['type'],
+                       'members': [{key: member[key] for key in ('raw', 'name', 'type', 'row', 'physicalLine')}
+                                   for member in members]})
+    return result
+
+
+def cleanup_reference_bytes(raw):
+    """Consolidate compatible duplicates while preserving untouched CSV bytes."""
+    document = _reference_document(raw)
+    groups = dictionary_rows(raw)
+    remove, replace = set(), {}
+    merged = filled_names = filled_types = 0
+    entries = {entry['row']: entry for entry in document['entries']}
+    match = re.search(br'\r\n|\r|\n', raw)
+    separator = match.group().decode('ascii') if match else '\n'
+    for group in groups:
+        if group['conflict'] or len(group['rows']) == 1:
+            continue
+        merged += 1
+        first = entries[group['row']]
+        cells = list(first['cells'])
+        for field, position in zip(('raw', 'name', 'type'), document['positions']):
+            if field != 'raw' and not cells[position].strip() and group[field]:
+                cells[position] = group[field]
+                filled_names += field == 'name'
+                filled_types += field == 'type'
+        if cells != first['cells']:
+            stream = io.StringIO(newline='')
+            # A changed row uses its original trailing separator if present.
+            ending = re.search(r'(\r\n|\n|\r)$', first['text'])
+            csv.writer(stream, lineterminator=ending[0] if ending else separator).writerow(cells)
+            rewritten = stream.getvalue()
+            replace[group['row']] = rewritten if ending else rewritten[:-len(separator)]
+        remove.update(group['rows'][1:])
+    if not remove and not replace:
+        proposed = raw
+    else:
+        text = document['headerText'] + ''.join(replace.get(entry['row'], entry['text'])
+                for entry in document['entries'] if entry['row'] not in remove)
+        proposed = (codecs.BOM_UTF8 if document['bom'] else b'') + text.encode('utf-8')
+    report = {'existingRows': len(document['entries']), 'totalRows': len(document['entries']) - len(remove),
+              'uniqueRawNames': sum(bool(raw_name_key(group['raw'])) for group in groups),
+              'duplicateGroups': sum(len(group['rows']) > 1 for group in groups),
+              'mergedDuplicateGroups': merged, 'removedDuplicateRows': len(remove),
+              'filledNameCells': filled_names, 'filledTypeCells': filled_types,
+              'conflictingGroups': sum(group['conflict'] for group in groups),
+              'conflicts': [group for group in groups if group['conflict']]}
+    # Reparse and assert that every unique decision has survived. The cleanup
+    # may remove redundant tasks but can never erase a conflicting human value.
+    checked = dictionary_rows(proposed)
+    evidence = lambda rows: [(raw_name_key(group['raw']),
+                              {raw_name_key(value) for value in group['nameValues']},
+                              {raw_name_key(value) for value in group['typeValues']}) for group in rows]
+    if evidence(checked) != evidence(groups):
+        raise ValueError('Dictionary duplicate cleanup changed a human decision; no file was changed.')
+    return proposed, report
 
 
 def append_names(reference, names, *, expected_sha256=None, dry_run=False):
-    """Append missing spellings, preserving all existing bytes and manual decisions.
+    """Consolidate compatible duplicates and append missing exact name keys.
 
     Pass the hash captured before source collection as expected_sha256 to refuse
     overwriting a newer manual dictionary. Repeating a successful call is a no-op.
-    No fuzzy normalization or automatic name/type decisions are performed.
+    Case/Unicode/spacing are the same spelling, as in the runtime exact lookup.
+    No fuzzy normalization or new name/type decisions are performed.
     """
     reference = Path(reference).resolve()
     original = reference.read_bytes()
     before = hashlib.sha256(original).hexdigest()
     if expected_sha256 and before != expected_sha256:
         raise ReferenceChangedError("The facility dictionary changed; collect again against its latest version.")
-    rows = _read_reference_bytes(original)
-    known = {row[0].strip() for row in rows}
+    cleaned, cleanup = cleanup_reference_bytes(original)
+    rows = _read_reference_bytes(cleaned)
+    known = {raw_name_key(row[0]) for row in rows}
     observed = {name.strip() for name in names if isinstance(name, str)
                 and name.strip().casefold() not in PLACEHOLDERS}
-    added = sorted(observed - known)
-    pending = sum(not row[1].strip() for row in rows)
+    observed_by_key = {}
+    for name in sorted(observed):
+        observed_by_key.setdefault(raw_name_key(name), name)
+    added = [name for key, name in observed_by_key.items() if key not in known]
+    pending = sum(bool(raw_name_key(row['raw'])) and not row['name'] for row in dictionary_rows(cleaned))
     summary = {"reference": str(reference), "referenceSha256Before": before,
-               "referenceSha256After": before, "existingRows": len(rows),
+               "referenceSha256After": before, **cleanup,
                "addedRows": len(added), "addedNames": added, "totalRows": len(rows) + len(added),
-               "pendingRows": pending + len(added), "changed": bool(added), "dryRun": bool(dry_run),
+               "pendingRows": pending + len(added), "changed": cleaned != original or bool(added), "dryRun": bool(dry_run),
                "newRowsHaveBlankNameAndType": True}
-    if not added:
+    if not summary['changed']:
         return summary
     # Use the existing line separator without rewriting quoting, BOM or old rows.
-    match = re.search(br"\r\n|\r|\n", original)
+    match = re.search(br"\r\n|\r|\n", cleaned)
     separator = match.group().decode("ascii") if match else "\n"
     new_text = io.StringIO(newline="")
-    csv.writer(new_text, lineterminator=separator).writerows((name, "", "") for name in added)
-    boundary = b"" if original.endswith((b"\n", b"\r")) else separator.encode("ascii")
-    proposed = original + boundary + new_text.getvalue().encode("utf-8")
+    positions = _reference_document(cleaned)['positions']
+    new_rows = []
+    for name in added:
+        cells = ['', '', '']; cells[positions[0]] = name; new_rows.append(cells)
+    csv.writer(new_text, lineterminator=separator).writerows(new_rows)
+    boundary = b"" if not added or cleaned.endswith((b"\n", b"\r")) else separator.encode("ascii")
+    proposed = cleaned + boundary + new_text.getvalue().encode("utf-8")
     # Round-trip check includes embedded quotes and multiline literal source names.
     checked = _read_reference_bytes(proposed)
     if checked[:len(rows)] != rows or checked[len(rows):] != [[name, "", ""] for name in added]:

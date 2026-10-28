@@ -2,17 +2,26 @@
 
 The authoritative dictionary is
 `unconnected_datasets/standartized_medical_centres_and_types.csv` in the registry
-repository. Every newly observed hospital/workplace spelling is appended as
+repository. Every newly observed hospital/workplace name is appended as
 `Raw Name,,`. The user supplies **Final Name** and **Final Type** manually. The
-append step never fills those decisions, renames an existing row, deletes a name,
-merges a hospital, changes doctor links, or rebuilds the website.
+update step never invents those decisions, merges a hospital, changes doctor
+links, or rebuilds the website.
 
-Existing bytes, including the BOM, headers, quoting, duplicate rows, row order,
-approved decisions and pending decisions, are preserved. Repeated checks with no
-new spelling produce no file change and no commit. Case, punctuation and internal
-spaces remain separate spellings, so a previous manual decision is never guessed
-for a new variant. Sources are read through explicit hospital/workplace columns
-and structured workplace fields; doctor names and descriptions are excluded.
+Raw names use the same exact key as the website: Unicode NFKC, case folding and
+collapsed whitespace. These typographical variants share one review task. No
+punctuation, legal-form, number, branch or fuzzy-name matching is used to remove
+rows. Before appending, compatible duplicates consolidate into their earliest
+row, filling missing B/C cells only from a unique already-recorded human value.
+Completed duplicate decisions therefore cannot create another blank task.
+
+Conflicting nonblank names or types keep all original rows and values for
+explicit review. The report lists their original logical rows and physical CSV
+lines. Unaffected row bytes, BOM, headers, quoting and relative row order stay
+intact. Removing redundant rows can change later row numbers; consumers always
+resolve row references from the current CSV. Repeating an already-clean update
+with no new names changes no bytes and creates no commit. The same reconciliation
+runs even when no names were added. Sources are read through explicit facility
+columns and structured workplace fields; doctor names/descriptions are excluded.
 
 ## Repository installation
 
@@ -60,7 +69,17 @@ disappear cause a visible error instead of silently losing source coverage.
 ## Shared local API
 
 - `append_names(reference, names, expected_sha256=None, dry_run=False)` validates
-  and appends; `ReferenceChangedError` means retry against the current manual file.
+  exact-key duplicates and appends missing names; `ReferenceChangedError` means
+  retry against the current manual file. `changed` covers cleanup and additions;
+  `addedRows` alone must not decide whether publication is needed.
+- `cleanup_reference_bytes(raw_bytes)` returns `(proposed_bytes, report)` without
+  writing. The report includes `removedDuplicateRows`, `filledNameCells`,
+  `filledTypeCells`, `conflictingGroups` and complete conflict evidence.
+- `dictionary_rows(raw_bytes)` returns one logical task per exact raw key, with
+  reconciled `name`/`type`, `conflictFields`, all original `members`, logical
+  `rows` and `physicalLines`. Conflicted fields have no selected value.
+- `raw_name_key(value)` is the shared Unicode/case/whitespace key. It must stay
+  aligned with `doctors_master.facility_names.exact_key` in the website pipeline.
 - `collect_manifest_names(root, manifest, cache_dir=None, allow_external=False)`
   returns `names`, input metrics, `cacheHits` and `scannedFiles`. Local callers may
   opt into absolute source paths. CSV inputs can set `encoding: "auto"` for legacy
