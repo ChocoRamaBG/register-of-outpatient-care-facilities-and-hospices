@@ -1,6 +1,9 @@
 name: (his.bg) Autonomous Medical Registry Scraper
 
 on:
+  schedule:
+    # Runs automatically at 02:00 UTC on the 1st of every month
+    - cron: '0 2 1 * *'
   workflow_dispatch:
 
 permissions:
@@ -10,11 +13,10 @@ permissions:
 jobs:
   run-pipeline:
     runs-on: ubuntu-latest
-    # Това е магията - казваме на стъпките да се изпълняват директно в новата папка
     defaults:
       run:
         working-directory: ./hisbg_scraper
-    
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -34,37 +36,32 @@ jobs:
       - name: Extract City Nomenclatures
         run: python city_code_names.py
 
-      - name: Execute Autonomous Deep Scrape
-        # Тук викаме правилното име на файла, което се вижда в репото!
+      - name: Execute Autonomous Incremental Scrape
         run: python scraper_hisbg.py
 
       - name: Commit Progress Tracker and Data
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          
-          # Папката hisbg_outputs ще се създаде вътре в hisbg_scraper
+
           mkdir -p hisbg_outputs
           touch hisbg_outputs/hisbg_processed_ids.txt
-          
+
           git add hisbg_outputs/hisbg_processed_ids.txt
-          
+
           if [ -f "hisbg_outputs/HISBG_FINAL_DOCTORS_DATA.xlsx" ]; then
             git add -f hisbg_outputs/HISBG_FINAL_DOCTORS_DATA.xlsx
           fi
-          
+
           if [ -f "hisbg_outputs/hisbg_city_dump.xlsx" ]; then
             git add -f hisbg_outputs/hisbg_city_dump.xlsx
           fi
-          
+
           if git diff --staged --quiet; then
             echo "No new changes to commit."
           else
-            git commit -m "Auto-save state: Update his.bg processed IDs and extracted medical data"
-            
-            # ИЗТЕГЛЯМЕ НОВИТЕ КОМИТИ ПРЕДИ ДА ПУШНЕМ, за да избегнем reject от сървъра
+            git commit -m "Auto-save state: Incremental update of his.bg registry data"
             git pull --rebase origin main
-            
             git push
           fi
 
@@ -74,8 +71,7 @@ jobs:
         run: |
           if [ -f "hisbg_outputs/CONTINUE_FLAG_HISBG" ]; then
             echo "Continue flag detected. Script hit time limit. Triggering next workflow run..."
-            # Името тук ТРЯБВА да съвпада точно с името най-горе във файла!
             gh workflow run "(his.bg) Autonomous Medical Registry Scraper"
           else
-            echo "No continue flag detected. Scraping is 100% complete."
+            echo "No continue flag detected. Incremental update is 100% complete."
           fi
