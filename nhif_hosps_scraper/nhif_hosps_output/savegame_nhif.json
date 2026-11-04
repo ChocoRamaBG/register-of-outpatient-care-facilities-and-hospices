@@ -1,0 +1,23 @@
+{
+  "year_index": 3,
+  "years": [
+    {
+      "year": 2024,
+      "year_str": "2024",
+      "href": "/bg/outpatientcare-report/consultation/2024"
+    },
+    {
+      "year": 2025,
+      "year_str": "2025",
+      "href": "/bg/outpatientcare-report/consultation/2025"
+    },
+    {
+      "year": 2026,
+      "year_str": "2026",
+      "href": "/bg/outpatientcare-report/consultation/2026"
+    }
+  ],
+  "in_progress": false,
+  "consecutive_fails": 0,
+  "last_check_timestamp": "2026-11-04 13:21:15"
+}
