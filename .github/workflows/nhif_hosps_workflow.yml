@@ -1,0 +1,87 @@
+name: "(nhif.bg) Autonomous Outpatient Consultations Scraper"
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Стартира автоматично на 1-во, 15-то и 25-то число всеки месец в 03:00 UTC,
+    # за да хваща новите месечни отчети веднага след публикуването им от НЗОК.
+    - cron: '0 3 1,15,25 * *'
+
+concurrency:
+  group: nhif-hosps-scraper
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./nhif_hosps_scraper
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python Environment
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install Dependencies & Playwright Browsers
+        run: |
+          python -m pip install --upgrade pip
+          pip install playwright pandas openpyxl
+          playwright install chromium --with-deps
+
+      - name: Execute Autonomous NHIF Scrape
+        run: python scraper_nhif.py
+
+      - name: Commit Progress Tracker and Master Excel Files
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+          mkdir -p nhif_hosps_output
+          touch nhif_hosps_output/parsed_urls_nhif.txt
+
+          git add nhif_hosps_output/parsed_urls_nhif.txt
+
+          if [ -f "nhif_hosps_output/savegame_nhif.json" ]; then
+            git add -f nhif_hosps_output/savegame_nhif.json
+          fi
+
+          if [ -f "nhif_hosps_output/failed_files_nhif.json" ]; then
+            git add -f nhif_hosps_output/failed_files_nhif.json
+          fi
+
+          # Добавяне на всички генерирани Master Excel файлове (вкл. _part_1, _part_2 и т.н.)
+          for file in nhif_hosps_output/NHIF_Master_*.xlsx; do
+            if [ -f "$file" ]; then
+              git add -f "$file"
+            fi
+          done
+
+          if git diff --staged --quiet; then
+            echo "No new changes to commit."
+          else
+            git commit -m "Auto-save state: Update nhif.bg outpatient consultation master tables"
+            git pull --rebase origin main
+            git push
+          fi
+
+      - name: Check Continue Flag and Trigger Next Run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -f "nhif_hosps_output/CONTINUE_FLAG_NHIF" ]; then
+            echo "Continue flag detected. Script hit time limit. Triggering next workflow run..."
+            gh workflow run "(nhif.bg) Autonomous Outpatient Consultations Scraper"
+          else
+            echo "No continue flag detected. Scraping is 100% up to date."
+          fi
