@@ -74,10 +74,6 @@ jobs:
             git add -f lekaribg_outputs/run_usage_log.txt
           fi
           
-          if [ -f "lekaribg_outputs/savegame_lekaribg.json" ]; then
-            git add -f lekaribg_outputs/savegame_lekaribg.json
-          fi
-          
           if [ -f "lekaribg_outputs/lekaribg_data_mega.csv" ]; then
             git add -f lekaribg_outputs/lekaribg_data_mega.csv
           fi
@@ -88,16 +84,4 @@ jobs:
             git commit -m "Auto-save state: Update lekaribg extracted data and run logs"
             git pull --rebase origin main
             git push
-          fi
-
-      - name: Check Continue Flag and Trigger Next Run
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if [ -f "lekaribg_outputs/CONTINUE_FLAG_LEKARIBG" ]; then
-            echo "Continue flag detected. Script hit time limit. Triggering next workflow run..."
-            # Тук името трябва да е АБСОЛЮТНО същото като 'name:' най-горе в документа!
-            gh workflow run "(lekaribg.net) Autonomous Registry Scraper"
-          else
-            echo "No continue flag detected. Scraping is 100% complete."
           fi
