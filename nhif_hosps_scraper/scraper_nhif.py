@@ -428,37 +428,26 @@ def main():
     global driver_page
     clear_continuation_flag()
 
-    g1_chunks = load_existing_master_chunks(MASTER_1_NAME, GROUP_1_COLS)
-    g2_chunks = load_existing_master_chunks(MASTER_2_NAME, GROUP_2_COLS)
-    g3_chunks = load_existing_master_chunks(MASTER_3_NAME, GROUP_3_COLS)
-    pending_parsed_urls = []
-
-    if retry_failed_files(g1_chunks, g2_chunks, g3_chunks, pending_parsed_urls):
+    # 1. Първо събираме всички години и проверяваме дали ИМА НОВИ ФАЙЛОВЕ
+    try:
+        years_list = scrape_available_years()
+    except Exception as e:
+        print(f"[CRITICAL] Неуспешно извличане на налични години: {e}")
         close_driver()
         return
 
-    years_list = scrape_available_years()
-    new_files_count = 0
-
+    new_file_tasks = []
     for year_obj in years_list:
-        if time_limit_reached():
-            print("\n[INFO] Лимитът на времето е достигнат. Флагът за продължение е активиран.")
-            flush_all_masters(g1_chunks, g2_chunks, g3_chunks, pending_parsed_urls)
-            flag_for_continuation()
-            break
-
         year_str = year_obj["year_str"]
         year_url = year_obj["href"] if year_obj["href"].startswith("http") else f"{BASE_URL}{year_obj['href']}"
-        print(f"\n--- Проверка на година: {year_str} ---")
-
+        
         try:
             driver_page.goto(year_url, wait_until="domcontentloaded")
             decline_cookies()
             driver_page.wait_for_selector("#files_container", timeout=30000)
             driver_page.evaluate("() => { document.querySelectorAll('#files_container li').forEach(el => { el.style.display = 'block'; }); }")
         except Exception as e:
-            print(f"[WARN] Грешка при зареждане на година {year_str}: {e}")
-            driver_page = restart_driver()
+            print(f"[WARN] Грешка при проверка на {year_str}: {e}")
             continue
 
         file_anchors = driver_page.locator("#files_container li a").all()
@@ -470,49 +459,77 @@ def main():
                 file_items.append((title_text, href))
         file_items.reverse()
 
-        time_limit_hit_in_files = False
         for idx, (title_text, file_href) in enumerate(file_items, start=1):
-            if time_limit_reached():
-                print("[INFO] Лимитът на времето е достигнат по време на обработка на файлове.")
-                flush_all_masters(g1_chunks, g2_chunks, g3_chunks, pending_parsed_urls)
-                flag_for_continuation()
-                time_limit_hit_in_files = True
-                break
-            
-            if is_url_parsed(file_href):
-                continue
+            if not is_url_parsed(file_href):
+                new_file_tasks.append({
+                    "year_str": year_str,
+                    "idx": idx,
+                    "title_text": title_text,
+                    "file_href": file_href
+                })
 
-            print(f"\n  [{year_str} - {idx}/{len(file_items)}] Обработка на НОВ файл: {title_text}")
-            try:
-                res = download_and_parse_single_file(year_str, idx, title_text, file_href)
-                if res is not None:
-                    df_g1, df_g2, df_g3 = res
-                    g1_chunks.append(df_g1)
-                    g2_chunks.append(df_g2)
-                    g3_chunks.append(df_g3)
-                    pending_parsed_urls.append(file_href)
-                    new_files_count += 1
-                    g1_chunks = consolidate_chunks(g1_chunks, GROUP_1_COLS)
-                    g2_chunks = consolidate_chunks(g2_chunks, GROUP_2_COLS)
-                    g3_chunks = consolidate_chunks(g3_chunks, GROUP_3_COLS)
-                else:
-                    add_failed_file(file_href, year_str, title_text, "Празен или невалиден Excel файл")
-            except Exception as e:
-                add_failed_file(file_href, year_str, title_text, str(e))
-                driver_page = restart_driver()
+    # 2. Проверяваме и дали имаме стари fail-нати файлове за retry
+    has_failed_files = False
+    if os.path.exists(failed_files_file):
+        try:
+            with open(failed_files_file, "r", encoding="utf-8") as f:
+                fails = json.load(f)
+                if fails: has_failed_files = True
+        except: pass
 
-            if len(pending_parsed_urls) >= 3:
-                flush_all_masters(g1_chunks, g2_chunks, g3_chunks, pending_parsed_urls)
+    # 3. АКО НЯМА НОВИ И НЯМА ФЕЙЛНАТИ - БИЕМ КЕПЕНЦИТЕ ВЕДНАГА!
+    if not new_file_tasks and not has_failed_files:
+        print("\n[INFO] Няма нови файлове. Пропускаме зареждането на 18 милиона реда в RAM! Всичко е актуално.")
+        close_driver()
+        return
 
-        if pending_parsed_urls:
+    # 4. АКО ИМА НОВИ, ЧАК ТОГАВА ТОВАРИМ ПАМЕТТА И ЧАКАМЕ ДА ПРОЧЕТЕ EXCEL-ИТЕ
+    print(f"\n[INFO] Открити {len(new_file_tasks)} нови и {has_failed_files} failed файла! Започва тежко зареждане на Master базата...")
+    g1_chunks = load_existing_master_chunks(MASTER_1_NAME, GROUP_1_COLS)
+    g2_chunks = load_existing_master_chunks(MASTER_2_NAME, GROUP_2_COLS)
+    g3_chunks = load_existing_master_chunks(MASTER_3_NAME, GROUP_3_COLS)
+    pending_parsed_urls = []
+
+    if retry_failed_files(g1_chunks, g2_chunks, g3_chunks, pending_parsed_urls):
+        close_driver()
+        return
+
+    new_files_count = 0
+    for task in new_file_tasks:
+        if time_limit_reached():
+            print("[INFO] Лимитът на времето е достигнат. Флагът за продължение е активиран.")
             flush_all_masters(g1_chunks, g2_chunks, g3_chunks, pending_parsed_urls)
-        
-        if time_limit_hit_in_files:
+            flag_for_continuation()
             break
+
+        print(f"\n  [{task['year_str']} - {task['idx']}] Обработка на НОВ файл: {task['title_text']}")
+        try:
+            res = download_and_parse_single_file(task['year_str'], task['idx'], task['title_text'], task['file_href'])
+            if res is not None:
+                df_g1, df_g2, df_g3 = res
+                g1_chunks.append(df_g1)
+                g2_chunks.append(df_g2)
+                g3_chunks.append(df_g3)
+                pending_parsed_urls.append(task['file_href'])
+                new_files_count += 1
+                g1_chunks = consolidate_chunks(g1_chunks, GROUP_1_COLS)
+                g2_chunks = consolidate_chunks(g2_chunks, GROUP_2_COLS)
+                g3_chunks = consolidate_chunks(g3_chunks, GROUP_3_COLS)
+            else:
+                add_failed_file(task['file_href'], task['year_str'], task['title_text'], "Празен или невалиден Excel файл")
+        except Exception as e:
+            add_failed_file(task['file_href'], task['year_str'], task['title_text'], str(e))
+            driver_page = restart_driver()
+
+        if len(pending_parsed_urls) >= 3:
+            flush_all_masters(g1_chunks, g2_chunks, g3_chunks, pending_parsed_urls)
+
+    if pending_parsed_urls:
+        flush_all_masters(g1_chunks, g2_chunks, g3_chunks, pending_parsed_urls)
 
     close_driver()
     if new_files_count == 0:
-        print("\n[INFO] Няма нови файлове за обработка. Всички данни са актуални!")
+        print("\n[INFO] Реално нямаше нови валидни файлове за добавяне.")
     else:
         print(f"\n[INFO] Успешно обработени и добавени {new_files_count} нови файла!")
 
