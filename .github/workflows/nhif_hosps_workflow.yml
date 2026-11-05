@@ -3,8 +3,8 @@ name: "(nhif.bg) Autonomous Outpatient Consultations Scraper"
 on:
   workflow_dispatch:
   schedule:
-    # Стартира автоматично на 1-во, 15-то и 25-то число всеки месец в 03:00 UTC
-    - cron: '0 3 1,15,25 * *'
+    # Стартира автоматично на 1-во число всеки месец в 03:00 UTC
+    - cron: '0 3 1 * *'
 
 concurrency:
   group: nhif-hosps-scraper
