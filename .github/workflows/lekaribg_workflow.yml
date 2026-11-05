@@ -3,7 +3,8 @@ name: (lekaribg.net) Autonomous Registry Scraper
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 6 * * 1'
+    # Изпълнява се на 1-во число всеки месец в 06:00 ч. сутринта UTC
+    - cron: '0 6 1 * *'
 
 concurrency:
   group: lekaribg-scraper
@@ -31,13 +32,33 @@ jobs:
         with:
           python-version: '3.10'
 
+      - name: Cache Python dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-lekaribg
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install webdriver-manager pandas selenium
 
       - name: Execute Autonomous Deep Scrape
-        run: python scraper_lekaribg.py
+        run: |
+          # Засичаме кога започва скрапера
+          START_TIME=$(date +%s)
+          
+          python scraper_lekaribg.py
+          
+          # Засичаме кога свършва и пресмятаме разликата
+          END_TIME=$(date +%s)
+          DURATION=$((END_TIME - START_TIME))
+          
+          mkdir -p lekaribg_outputs
+          echo "$(date) - Този рън отне $DURATION секунди." >> lekaribg_outputs/run_usage_log.txt
+          echo "Времето е записано успешно."
 
       - name: Commit Progress Tracker and Data
         run: |
@@ -48,6 +69,10 @@ jobs:
           touch lekaribg_outputs/parsed_urls_lekaribg.txt
           
           git add lekaribg_outputs/parsed_urls_lekaribg.txt
+          
+          if [ -f "lekaribg_outputs/run_usage_log.txt" ]; then
+            git add -f lekaribg_outputs/run_usage_log.txt
+          fi
           
           if [ -f "lekaribg_outputs/savegame_lekaribg.json" ]; then
             git add -f lekaribg_outputs/savegame_lekaribg.json
@@ -60,10 +85,8 @@ jobs:
           if git diff --staged --quiet; then
             echo "No new changes to commit."
           else
-            git commit -m "Auto-save state: Update lekaribg extracted data"
-            
+            git commit -m "Auto-save state: Update lekaribg extracted data and run logs"
             git pull --rebase origin main
-            
             git push
           fi
 
@@ -73,7 +96,8 @@ jobs:
         run: |
           if [ -f "lekaribg_outputs/CONTINUE_FLAG_LEKARIBG" ]; then
             echo "Continue flag detected. Script hit time limit. Triggering next workflow run..."
-            gh workflow run "(lekaribg) Autonomous Registry Scraper"
+            # Тук името трябва да е АБСОЛЮТНО същото като 'name:' най-горе в документа!
+            gh workflow run "(lekaribg.net) Autonomous Registry Scraper"
           else
             echo "No continue flag detected. Scraping is 100% complete."
           fi
