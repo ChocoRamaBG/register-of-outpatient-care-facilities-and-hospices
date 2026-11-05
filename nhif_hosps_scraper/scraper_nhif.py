@@ -16,7 +16,7 @@ from playwright.sync_api import (
 # КОНФИГУРАЦИЯ
 # ============================================================
 START_TIME = time.time()
-TIME_LIMIT_SECONDS = 5.4 * 60 * 60  # ~5 часа и 24 минути
+TIME_LIMIT_SECONDS = 5.4 * 60 * 60  # ~5 часа и 24 минути (лимит за GitHub Actions)
 
 BASE_URL = "https://www.nhif.bg"
 START_URL = f"{BASE_URL}/bg/outpatientcare-report"
@@ -74,12 +74,21 @@ os.makedirs(raw_downloads_dir, exist_ok=True)
 
 memory_file = os.path.join(output_dir, "parsed_urls_nhif.txt")
 failed_files_file = os.path.join(output_dir, "failed_files_nhif.json")
+CONTINUE_FLAG_FILE = os.path.join(output_dir, "CONTINUE_FLAG_NHIF")
 
 # ============================================================
-# УПРАВЛЕНИЕ НА ВРЕМЕТО
+# УПРАВЛЕНИЕ НА ВРЕМЕТО И ФЛАГОВЕ
 # ============================================================
 def time_limit_reached() -> bool:
     return (time.time() - START_TIME) >= TIME_LIMIT_SECONDS
+
+def flag_for_continuation():
+    with open(CONTINUE_FLAG_FILE, "w", encoding="utf-8") as f:
+        f.write("CONTINUE")
+
+def clear_continuation_flag():
+    if os.path.exists(CONTINUE_FLAG_FILE):
+        os.remove(CONTINUE_FLAG_FILE)
 
 # ============================================================
 # ПАМЕТ ЗА ОБРАБОТЕНИ URL АДРЕСИ
@@ -177,8 +186,7 @@ def normalize_col_name(col: object) -> str:
     return re.sub(r"\s+", " ", str(col)).strip()
 
 def find_existing_local_file(raw_dir: str, year_str: str, idx: int, file_href: str) -> str | None:
-    if not os.path.exists(raw_dir):
-        return None
+    if not os.path.exists(raw_dir): return None
     prefix = f"{year_str}_{idx:02d}_"
     url_filename = unquote(file_href.split("/")[-1]).strip()
     for fname in os.listdir(raw_dir):
@@ -202,8 +210,7 @@ def process_excel_file_all_groups(filepath: str):
 
     for target_sheet in SHEETS_TO_READ:
         actual_sheet = available_sheets.get(target_sheet.upper())
-        if not actual_sheet:
-            continue
+        if not actual_sheet: continue
 
         try:
             df = pd.read_excel(xls, sheet_name=actual_sheet)
@@ -370,7 +377,9 @@ def retry_failed_files(g1_chunks, g2_chunks, g3_chunks, pending_parsed_urls) -> 
 
     for idx, item in enumerate(failed_list, start=1):
         if time_limit_hit or time_limit_reached():
-            if not time_limit_hit: print("[INFO] Лимитът на времето е достигнат.")
+            if not time_limit_hit:
+                print("[INFO] Лимитът на времето е достигнат. Флагът за продължение е активиран.")
+                flag_for_continuation()
             time_limit_hit = True
             still_failed.append(item)
             continue
@@ -417,6 +426,8 @@ def scrape_available_years() -> list[dict]:
 # ============================================================
 def main():
     global driver_page
+    clear_continuation_flag()
+
     g1_chunks = load_existing_master_chunks(MASTER_1_NAME, GROUP_1_COLS)
     g2_chunks = load_existing_master_chunks(MASTER_2_NAME, GROUP_2_COLS)
     g3_chunks = load_existing_master_chunks(MASTER_3_NAME, GROUP_3_COLS)
@@ -431,8 +442,9 @@ def main():
 
     for year_obj in years_list:
         if time_limit_reached():
-            print("\n[INFO] Лимитът на времето е достигнат. Прекъсване.")
+            print("\n[INFO] Лимитът на времето е достигнат. Флагът за продължение е активиран.")
             flush_all_masters(g1_chunks, g2_chunks, g3_chunks, pending_parsed_urls)
+            flag_for_continuation()
             break
 
         year_str = year_obj["year_str"]
@@ -458,9 +470,13 @@ def main():
                 file_items.append((title_text, href))
         file_items.reverse()
 
+        time_limit_hit_in_files = False
         for idx, (title_text, file_href) in enumerate(file_items, start=1):
             if time_limit_reached():
+                print("[INFO] Лимитът на времето е достигнат по време на обработка на файлове.")
                 flush_all_masters(g1_chunks, g2_chunks, g3_chunks, pending_parsed_urls)
+                flag_for_continuation()
+                time_limit_hit_in_files = True
                 break
             
             if is_url_parsed(file_href):
@@ -490,6 +506,9 @@ def main():
 
         if pending_parsed_urls:
             flush_all_masters(g1_chunks, g2_chunks, g3_chunks, pending_parsed_urls)
+        
+        if time_limit_hit_in_files:
+            break
 
     close_driver()
     if new_files_count == 0:
