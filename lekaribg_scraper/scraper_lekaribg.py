@@ -2,7 +2,6 @@ import time
 import os
 import sys
 import csv
-import json
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -11,7 +10,6 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
-from selenium.common.exceptions import TimeoutException, WebDriverException
 
 # --- CONFIGURATION & PATHS ---
 START_TIME = time.time()
@@ -25,26 +23,11 @@ except NameError:
 output_dir = os.path.join(base_dir, "lekaribg_outputs")
 os.makedirs(output_dir, exist_ok=True)
 
-state_file = os.path.join(output_dir, "savegame_lekaribg.json")
 memory_file = os.path.join(output_dir, "parsed_urls_lekaribg.txt")
 current_batch_filename = os.path.join(output_dir, "lekaribg_data_mega.csv")
 CONTINUE_FLAG_FILE = os.path.join(output_dir, "CONTINUE_FLAG_LEKARIBG")
 
 # --- STATE AND MEMORY MANAGEMENT ---
-state = {"page": 1}
-if os.path.exists(state_file):
-    try:
-        with open(state_file, "r") as f:
-            state = json.load(f)
-            print(f"[INFO] Resuming execution from Page {state['page']}.")
-    except Exception:
-        print("[WARN] Corrupted state file detected. Initializing new state.")
-        state = {"page": 1}
-
-def save_state(page):
-    with open(state_file, "w") as f:
-        json.dump({"page": page}, f)
-
 parsed_urls = set()
 if os.path.exists(memory_file):
     with open(memory_file, "r", encoding="utf-8") as f:
@@ -162,21 +145,21 @@ def scrape_details_from_profile(url, basic_info):
 if os.path.exists(CONTINUE_FLAG_FILE):
     os.remove(CONTINUE_FLAG_FILE)
 
-page = state["page"]
-print(f"[INFO] Initializing sequence starting at page {page}.")
+# Винаги започваме от първа страница
+page = 1
+print("[INFO] Starting scan from page 1 to check for new records.")
 timeout_reached = False
 
 try:
     while True:
         if (time.time() - START_TIME) > TIME_LIMIT_SECONDS:
             print("\n[WARN] Execution time limit threshold reached. Initiating graceful shutdown...")
-            with open(CONTINUE_FLAG_FILE, 'w') as f:
-                f.write("CONTINUE_REQUIRED")
+            # Вече нямаме нужда от CONTINUE флаг, защото винаги почваме от началото и сканираме бързо.
             timeout_reached = True
             break
 
         target_url = f"https://lekaribg.net/listing-category/lekari/page/{page}/"
-        print(f"  > Processing PAGE {page}...")
+        print(f"  > Scanning PAGE {page}...")
         driver.get(target_url)
         
         try:
@@ -198,8 +181,13 @@ try:
             for item in items:
                 try:
                     link_el = item.find_element(By.CSS_SELECTOR, "h4 a")
-                    name = link_el.text.strip()
                     url = link_el.get_attribute("href")
+                    
+                    # Ако сме го парсвали вече, директно го пропускаме и не правим излишни заявки
+                    if url in parsed_urls:
+                        continue
+
+                    name = link_el.text.strip()
                     
                     phone_backup = "-"
                     try:
@@ -227,18 +215,17 @@ try:
                     doctors_on_page.append(doc_data)
                 except: continue
 
-            for doc in doctors_on_page:
-                doc_url = doc['URL']
-                
-                if doc_url in parsed_urls:
-                    continue
-
-                full_data = scrape_details_from_profile(doc_url, doc)
-                save_single_record(full_data)
-                mark_as_parsed(doc_url)
+            # Обработваме само новите доктори, намерени на тази страница
+            if doctors_on_page:
+                print(f"    [+] Found {len(doctors_on_page)} new records on page {page}.")
+                for doc in doctors_on_page:
+                    full_data = scrape_details_from_profile(doc['URL'], doc)
+                    save_single_record(full_data)
+                    mark_as_parsed(doc['URL'])
+            else:
+                print("    [-] No new records on this page.")
 
             page += 1
-            save_state(page)
             
         except Exception as e:
             print(f"[CRITICAL] Page iteration failure on page {page}: {e}")
