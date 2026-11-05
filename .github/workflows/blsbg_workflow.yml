@@ -2,6 +2,9 @@ name: (blsbg.eu) Autonomous BLS BG Archive Scraper
 
 on:
   workflow_dispatch:
+  schedule:
+    # Изпълнява се на 1-во число всеки месец в 04:00 ч. сутринта UTC
+    - cron: '0 4 1 * *'
 
 permissions:
   contents: write
@@ -11,7 +14,6 @@ jobs:
   run-blsbg-pipeline:
     runs-on: ubuntu-latest
     
-    # Задаваме работната директория глобално за всички стъпки
     defaults:
       run:
         working-directory: ./blsbg_scraper
@@ -26,6 +28,14 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+
+      - name: Cache Python dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-blsbg
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
       - name: Install Dependencies
         run: |
@@ -52,7 +62,6 @@ jobs:
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           
-          # Създаваме директорията и лог файла превантивно (с новото име за UIN кодове)
           mkdir -p blsbg_outputs
           touch blsbg_outputs/processed_blsbg_uin_codes.txt
           git add blsbg_outputs/processed_blsbg_uin_codes.txt
@@ -61,7 +70,6 @@ jobs:
             git add blsbg_outputs/bg_medics_dynamic_2029.xlsx
           fi
           
-          # НОВО: Запазваме паметта за текущия регион в Git
           if [ -f "blsbg_outputs/resume_state.txt" ]; then
             git add blsbg_outputs/resume_state.txt
           fi
