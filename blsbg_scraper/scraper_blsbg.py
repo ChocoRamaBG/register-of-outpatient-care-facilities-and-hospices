@@ -102,7 +102,7 @@ def main_loop():
     print(f"[INFO] Index loaded: {len(processed_uins)} unique UINs ready for deduplication.")
 
     # Логика за паметта (Resume State)
-    start_region = 28 #was 1 before
+    start_region = 1
     start_page = 1
 
     if os.path.exists(RESUME_STATE_FILE):
