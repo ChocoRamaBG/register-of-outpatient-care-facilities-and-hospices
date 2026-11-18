@@ -138,7 +138,7 @@ def main_loop():
 
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
-    for r in range(start_region, 29): 
+    for r in range(start_region, 30): 
         region_code = f"{r:02d}"
         page_num = start_page if r == start_region else 1 
         last_first_row_data = None  
