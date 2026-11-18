@@ -144,7 +144,7 @@ def main_loop():
         last_first_row_data = None  
         
         print(f"\n========================================")
-        print(f" PROCESSING REGION: {region_code} / 28")
+        print(f" PROCESSING REGION: {region_code} / 29")
         print(f"========================================")
         
         while True:
