@@ -45,7 +45,7 @@ USER_AGENT = os.getenv(
 )
 SEARCH_URL = "https://blsbg.eu/bg/medics/search"
 SEARCH_SUBMIT = "Търсене"
-PAGE_SIZE = 25
+# Page length is discovered from live summary ranges (e.g., 1-35), not hard-coded.
 SAVE_EVERY_N_PAGES = 10
 MAX_RUNTIME_SECONDS = 20400
 SAFETY_BUFFER_SECONDS = 180
@@ -91,6 +91,9 @@ class ParsedPage:
     first_uin: Optional[str]
     summary: str
     next_url: Optional[str]
+    first_row: int
+    last_row: int
+    total_rows: int
 
 
 def clean_text(value) -> str:
@@ -158,14 +161,14 @@ def is_allowed_url(value: str) -> bool:
     )
 
 
-def get_resume_state() -> Tuple[int, int, Optional[List[Region]], Optional[str]]:
+def get_resume_state() -> Tuple[int, int, Optional[List[Region]], Optional[str], Optional[int]]:
     if not (1 <= START_REGION <= 29):
         raise ValueError("BLS_START_REGION must be between 1 and 29.")
     if FORCE_START:
         print(f"[INFO] Forced restart from Region {START_REGION:02d}, Page 1; keeping existing Excel.")
-        return START_REGION, 1, None, None
+        return START_REGION, 1, None, None, 1
     if not RESUME_STATE_FILE.exists():
-        return START_REGION, 1, None, None
+        return START_REGION, 1, None, None, 1
 
     raw = RESUME_STATE_FILE.read_text(encoding="utf-8").strip()
     try:
@@ -179,14 +182,19 @@ def get_resume_state() -> Tuple[int, int, Optional[List[Region]], Optional[str]]
             next_url = state.get("next_url")
             if next_url and not is_allowed_url(next_url):
                 raise ValueError("Unrecognized next-page URL in resume state")
+            expected_first = state.get("expected_first")
+            if expected_first is not None:
+                expected_first = int(expected_first)
+                if expected_first < 1:
+                    raise ValueError("Invalid first-row checkpoint")
         else:
             # Accept existing checkpoints from the old scraper: '1,1'.
             region, page = (int(part) for part in raw.split(",", 1))
-            saved_regions, next_url = None, None
+            saved_regions, next_url, expected_first = None, None, (1 if page == 1 else None)
         if not (1 <= region <= 29 and page >= 1):
             raise ValueError("Invalid region or page")
         print(f"[INFO] Resuming Region {region:02d}, Page {page}.")
-        return region, page, saved_regions, next_url
+        return region, page, saved_regions, next_url, expected_first
     except (KeyError, ValueError, TypeError, json.JSONDecodeError) as exc:
         raise ValueError(
             f"Invalid resume_state.txt; fix it or set BLS_FORCE_START=1. Details: {exc}"
@@ -196,6 +204,7 @@ def get_resume_state() -> Tuple[int, int, Optional[List[Region]], Optional[str]]
 def save_checkpoint(
     records: Dict[str, dict], position: Optional[Tuple[int, int]],
     regions: List[Region], next_url: Optional[str] = None,
+    expected_first: Optional[int] = None,
 ) -> None:
     df = pd.DataFrame(list(records.values()))
     for column in COLUMNS:
@@ -219,6 +228,7 @@ def save_checkpoint(
             "page": page,
             "regions": [{"code": r.code, "name": r.name} for r in regions],
             "next_url": next_url if next_url and is_allowed_url(next_url) else None,
+            "expected_first": expected_first,
         }
         atomic_text_write(RESUME_STATE_FILE, json.dumps(state, ensure_ascii=False, indent=2) + "\n")
         print(f"[SAVE] {len(records)} unique UINs; resume Region {region:02d}, Page {page}.")
@@ -296,24 +306,60 @@ def parse_summary(text: str) -> Tuple[int, int, int]:
 
 
 def get_page_from_href(url: str) -> Optional[int]:
+    """Recognize common Yii page parameters without assuming one widget ID."""
     parsed = urlsplit(url)
-    from_query = parse_qs(parsed.query).get("UIN_page", [])
-    if from_query and from_query[0].isdigit():
-        return int(from_query[0])
-    m = re.search(r"(?:^|/)UIN_page/(\d+)(?:/|$)", parsed.path)
+    for key, values in parse_qs(parsed.query).items():
+        if (key.lower() == "page" or key.lower().endswith("_page")) and values:
+            if values[0].isdigit():
+                return int(values[0])
+    from urllib.parse import unquote
+    m = re.search(r"(?:^|/)(?:[A-Za-z0-9_-]*_page|page)/(\d+)(?:/|$)",
+                  unquote(parsed.path), flags=re.I)
     return int(m.group(1)) if m else None
 
 
-def find_next_page_url(soup: BeautifulSoup, current_url: str, page: int) -> Optional[str]:
-    for a in soup.select('a[href]'):
-        href = a.get("href", "")
-        target = urljoin(current_url, href)
-        if is_allowed_url(target) and get_page_from_href(target) == page + 1:
+def region_filter_matches_url(url: str, code: str) -> bool:
+    """Reject a pager link explicitly filtered to a different region."""
+    split = urlsplit(url)
+    form_region = parse_qs(split.query).get("DocSearch[region]")
+    if form_region:
+        return form_region[0].upper() == code.upper()
+    from urllib.parse import unquote
+    route = unquote(split.path)
+    region_match = re.search(r"/DocSearch\[region\]/([^/]+)", route, flags=re.I)
+    return region_match is None or unquote(region_match.group(1)).upper() == code.upper()
+
+
+def find_next_page_url(
+    soup: BeautifulSoup, current_url: str, page: int, region_code: str
+) -> Optional[str]:
+    # The site's own Yii pager knows which parameters it requires. Do not
+    # reconstruct its links if a valid, region-matching href is available.
+    selectors = (
+        "ul.yiiPager a[href], .pagination a[href], "
+        "a[rel='next'][href], .pager a[href], a[href]"
+    )
+    for a in soup.select(selectors):
+        target = urljoin(current_url, a.get("href", ""))
+        if (is_allowed_url(target)
+                and get_page_from_href(target) == page + 1
+                and region_filter_matches_url(target, region_code)):
+            return target
+    # Fallback for a Yii installation with an unusual pager parameter:
+    # only trust anchors from the actual pager whose visible label is next page.
+    for a in soup.select("ul.yiiPager a[href], .pagination a[href], .pager a[href]"):
+        if a.get_text(" ", strip=True) != str(page + 1):
+            continue
+        target = urljoin(current_url, a.get("href", ""))
+        if is_allowed_url(target) and region_filter_matches_url(target, region_code):
             return target
     return None
 
 
-def parse_page(content: bytes, region: Region, index: int, page: int, url: str) -> ParsedPage:
+def parse_page(
+    content: bytes, region: Region, index: int, page: int, url: str,
+    expected_first: Optional[int] = None,
+) -> ParsedPage:
     soup = BeautifulSoup(content, "html.parser")
     table = soup.select_one("table.items")
     summary_element = soup.select_one("div.summary")
@@ -333,7 +379,15 @@ def parse_page(content: bytes, region: Region, index: int, page: int, url: str) 
         raise PageError("Result table exists but pagination summary is missing.")
 
     first, last, total = parse_summary(summary)
-    expected_first = (page - 1) * PAGE_SIZE + 1
+    # Dynamic pagination: BLS is returning 35 rows per page in the user's
+    # current run, not the 25 assumed by the earlier scraper.
+    if page == 1:
+        expected_first = 1
+    if expected_first is None:
+        raise PageError(
+            f"Missing validated starting row for Page {page}. "
+            "Re-read Page 1 to establish this region's actual page length."
+        )
     if first != expected_first:
         raise PageError(
             f"Requested page {page}, but summary starts at row {first}, expected {expected_first}. "
@@ -401,8 +455,9 @@ def parse_page(content: bytes, region: Region, index: int, page: int, url: str) 
     if len({row["UIN"] for row in entries}) != len(entries):
         raise PageError(f"Repeated UIN in a single page {page}.")
     is_last = last >= total
-    next_url = find_next_page_url(soup, url, page) if not is_last else None
-    return ParsedPage(entries, is_last, entries[0]["UIN"], summary, next_url)
+    next_url = find_next_page_url(soup, url, page, region.code) if not is_last else None
+    return ParsedPage(entries, is_last, entries[0]["UIN"], summary, next_url,
+                      first, last, total)
 
 
 def fetch_verified(session: requests.Session, candidates: List[str], parser,
@@ -413,7 +468,7 @@ def fetch_verified(session: requests.Session, candidates: List[str], parser,
         if seconds_available(start_clock) < CONNECT_TIMEOUT + READ_TIMEOUT + 30:
             raise RuntimeBudgetReached("Not enough time for a safe HTTP request.")
         overload = False
-        for candidate in dict.fromkeys(candidates):
+        for candidate_number, candidate in enumerate(dict.fromkeys(candidates), start=1):
             if not is_allowed_url(candidate):
                 raise PageError(f"Unexpected target URL {candidate}")
             response = None
@@ -425,6 +480,12 @@ def fetch_verified(session: requests.Session, candidates: List[str], parser,
                 if response.status_code != 200:
                     raise PageError(f"HTTP {response.status_code} at {candidate}")
                 parsed = parser(response.content, response.url)
+                if label.endswith("Page 1") and getattr(parsed, "rows", None) and not parsed.is_last:
+                    try:
+                        (SCRIPT_DIR / "blsbg_last_good_first_page.html").write_bytes(
+                            response.content[:300_000])
+                    except OSError:
+                        pass
                 if DEBUG_HTML_FILE.exists():
                     DEBUG_HTML_FILE.unlink(missing_ok=True)
                 return parsed, time.monotonic() - started
@@ -432,8 +493,17 @@ def fetch_verified(session: requests.Session, candidates: List[str], parser,
                 raise
             except (requests.RequestException, PageError) as exc:
                 last_error = str(exc)
+                status = response.status_code if response is not None else "network error"
+                print(f"[FETCH WARN] {label}: {status}, URL={candidate[:220]}, "
+                      f"issue={last_error[:130]}")
                 if response is not None and response.status_code == 200:
                     debug_bad_page(response.content)
+                    if attempt == 1 and "Page " in label:
+                        try:
+                            (SCRIPT_DIR / f"blsbg_failed_candidate_{candidate_number}.html").write_bytes(
+                                response.content[:300_000])
+                        except OSError:
+                            pass
                 if response is not None and response.status_code in (429, 500, 502, 503, 504):
                     overload = True
                     break  # Do not immediately send another request to an overloaded server.
@@ -470,16 +540,20 @@ def discover_regions(session: requests.Session, start_clock: float) -> List[Regi
 
 
 def fetch_page(session: requests.Session, region: Region, index: int, page: int,
-               next_url: Optional[str], start_clock: float) -> Tuple[ParsedPage, float]:
+               next_url: Optional[str], start_clock: float,
+               expected_first: Optional[int] = None) -> Tuple[ParsedPage, float]:
     candidates = []
-    if next_url and is_allowed_url(next_url):
+    if (next_url and is_allowed_url(next_url)
+            and region_filter_matches_url(next_url, region.code)):
         candidates.append(next_url)
     candidates.append(get_request_url(region.code, page))
-    if page > 1:
+    if page > 1 and not next_url:
+        # Only try an invented legacy path if the website exposed no pager URL.
         candidates.append(get_path_style_url(region.code, page))
     return fetch_verified(
         session, candidates,
-        lambda body, final_url: parse_page(body, region, index, page, final_url),
+        lambda body, final_url: parse_page(
+            body, region, index, page, final_url, expected_first=expected_first),
         start_clock, f"Region {index:02d} ({region.code}), Page {page}"
     )
 
@@ -489,7 +563,7 @@ def main() -> int:
     print("[INFO] Initializing BLSBG DocSearch scraper (no Selenium/Chrome).")
     records = load_records()
     check_tracker(records)
-    start_region, start_page, saved_regions, resume_url = get_resume_state()
+    start_region, start_page, saved_regions, resume_url, resume_expected_first = get_resume_state()
     CONTINUE_FLAG_FILE.unlink(missing_ok=True)
     LAST_ERROR_FILE.unlink(missing_ok=True)
 
@@ -503,6 +577,7 @@ def main() -> int:
     regions = saved_regions or []
     position = (start_region, start_page)
     current_url = resume_url
+    expected_first = resume_expected_first
     try:
         if not regions:
             regions = discover_regions(session, clock)
@@ -516,14 +591,29 @@ def main() -> int:
             region = regions[index - 1]
             page = start_page if index == start_region else 1
             next_url = current_url if index == start_region else None
+            expected_first = resume_expected_first if index == start_region else 1
             previous_first_uin = None
             pending_pages = 0
             print(f"\n[REGION] {index:02d}/{len(regions):02d} ({region.code}: {region.name}), "
                   f"starting Page {page}")
+            if page > 1 and expected_first is None:
+                # Old checkpoints saved page number but not true page length.
+                # Re-read page 1 once to learn what BLS actually returned.
+                print(f"[INFO] Legacy resume for {region.code}, Page {page}: "
+                      "re-reading Page 1 to establish real page boundaries.")
+                first_page, _ = fetch_page(session, region, index, 1, None, clock, 1)
+                observed_page_size = first_page.last_row - first_page.first_row + 1
+                expected_first = (page - 1) * observed_page_size + 1
+                if page == 2 and first_page.next_url:
+                    next_url = first_page.next_url
+                print(f"[INFO] Page 1 holds {observed_page_size} records; "
+                      f"Page {page} must begin at record {expected_first}.")
+                time.sleep(PAGE_DELAY)
             while True:
                 position = (index, page)
                 current_url = next_url
-                parsed, duration = fetch_page(session, region, index, page, next_url, clock)
+                parsed, duration = fetch_page(
+                    session, region, index, page, next_url, clock, expected_first)
                 if parsed.first_uin and parsed.first_uin == previous_first_uin:
                     raise PageError(f"Page {page} repeats first UIN from the previous page.")
                 previous_first_uin = parsed.first_uin
@@ -533,7 +623,11 @@ def main() -> int:
                         records[row["UIN"]] = row
                         new_count += 1
                 print(f"[PAGE] {index:02d}/{page}: {len(parsed.rows)} rows, "
-                      f"{new_count} new, {duration:.1f}s, total {len(records)} UINs.")
+                      f"{new_count} new, {duration:.1f}s, total {len(records)} UINs, "
+                      f"summary={parsed.summary!r}.")
+                if page == 1 and not parsed.is_last:
+                    print(f"[PAGER] {region.code} next URL from HTML: "
+                          f"{parsed.next_url or 'NOT FOUND (query fallback only)'}")
                 pending_pages += 1
                 if parsed.is_last:
                     following = (index + 1, 1) if index < len(regions) else None
@@ -545,10 +639,11 @@ def main() -> int:
                     break
                 page += 1
                 next_url = parsed.next_url  # Follow the actual BLS pager instead of guessing.
+                expected_first = parsed.last_row + 1
                 position = (index, page)
                 current_url = next_url
                 if pending_pages >= SAVE_EVERY_N_PAGES:
-                    save_checkpoint(records, position, regions, next_url)
+                    save_checkpoint(records, position, regions, next_url, expected_first)
                     pending_pages = 0
                 if seconds_available(clock) < CONNECT_TIMEOUT + READ_TIMEOUT + 30:
                     raise RuntimeBudgetReached("CI runtime nearly exhausted between pages.")
@@ -559,20 +654,20 @@ def main() -> int:
         return 0
     except RuntimeBudgetReached as exc:
         print(f"[PAUSED] {exc}")
-        save_checkpoint(records, position, regions, current_url)
+        save_checkpoint(records, position, regions, current_url, expected_first)
         atomic_text_write(CONTINUE_FLAG_FILE, "CONTINUE_REQUIRED\n")
         print(f"[PAUSED] Requested continuation at Region {position[0]:02d}, Page {position[1]}.")
         return 0
     except (PageError, SiteAccessDenied, requests.RequestException) as exc:
         print(f"[STOPPED] {exc}")
         # If region discovery failed, don't write an empty region map checkpoint.
-        save_checkpoint(records, position, regions, current_url)
+        save_checkpoint(records, position, regions, current_url, expected_first)
         atomic_text_write(LAST_ERROR_FILE, f"{type(exc).__name__}: {exc}\n")
         print("[STOPPED] No pages skipped. Re-run when BLS responds.")
         return 1
     except KeyboardInterrupt:
         print("[INTERRUPTED] Saving progress.")
-        save_checkpoint(records, position, regions, current_url)
+        save_checkpoint(records, position, regions, current_url, expected_first)
         return 130
     finally:
         session.close()
