@@ -1,1 +1,119 @@
-1,1
+{
+  "region": 1,
+  "page": 2,
+  "regions": [
+    {
+      "code": "BLG",
+      "name": "Благоевград"
+    },
+    {
+      "code": "BGS",
+      "name": "Бургас"
+    },
+    {
+      "code": "VAR",
+      "name": "Варна"
+    },
+    {
+      "code": "VTR",
+      "name": "Велико Търново"
+    },
+    {
+      "code": "VID",
+      "name": "Видин"
+    },
+    {
+      "code": "VRC",
+      "name": "Враца"
+    },
+    {
+      "code": "GAB",
+      "name": "Габрово"
+    },
+    {
+      "code": "DOB",
+      "name": "Добрич"
+    },
+    {
+      "code": "KRZ",
+      "name": "Кърджали"
+    },
+    {
+      "code": "KNL",
+      "name": "Кюстендил"
+    },
+    {
+      "code": "LOV",
+      "name": "Ловеч"
+    },
+    {
+      "code": "MON",
+      "name": "Монтана"
+    },
+    {
+      "code": "PAZ",
+      "name": "Пазарджик"
+    },
+    {
+      "code": "PER",
+      "name": "Перник"
+    },
+    {
+      "code": "PVN",
+      "name": "Плевен"
+    },
+    {
+      "code": "PDV",
+      "name": "Пловдив"
+    },
+    {
+      "code": "RAZ",
+      "name": "Разград"
+    },
+    {
+      "code": "RSE",
+      "name": "Русе"
+    },
+    {
+      "code": "SLS",
+      "name": "Силистра"
+    },
+    {
+      "code": "SLV",
+      "name": "Сливен"
+    },
+    {
+      "code": "SML",
+      "name": "Смолян"
+    },
+    {
+      "code": "SOF",
+      "name": "София-град"
+    },
+    {
+      "code": "SFO",
+      "name": "София Област"
+    },
+    {
+      "code": "SZR",
+      "name": "Стара Загора"
+    },
+    {
+      "code": "TGV",
+      "name": "Търговище"
+    },
+    {
+      "code": "HKV",
+      "name": "Хасково"
+    },
+    {
+      "code": "SHU",
+      "name": "Шумен"
+    },
+    {
+      "code": "JAM",
+      "name": "Ямбол"
+    }
+  ],
+  "next_url": "https://blsbg.eu/bg/medics/search/DocSearch%5Busername%5D//DocSearch%5Buin%5D//DocSearch%5Bregion%5D/BLG/yt0/%D0%A2%D1%8A%D1%80%D1%81%D0%B5%D0%BD%D0%B5/UIN_page/2"
+}
