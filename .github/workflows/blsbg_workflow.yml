@@ -40,7 +40,7 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pandas selenium webdriver-manager openpyxl
+          python -m pip install pandas requests beautifulsoup4 openpyxl
 
       - name: Execute Autonomous BLS BG Deep Scrape
         run: python -u scraper_blsbg.py
