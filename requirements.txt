@@ -3,5 +3,6 @@ pandas
 openpyxl
 selenium
 playwright
+beautifulsoup4
 webdriver-manager
 undetected-chromedriver
