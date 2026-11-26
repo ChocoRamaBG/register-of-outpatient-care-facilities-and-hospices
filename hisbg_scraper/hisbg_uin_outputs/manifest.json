@@ -1,21 +1,21 @@
 {
   "schema": 1,
   "files": {
-    "address_specialities.csv": "40224703ecf469a4946a6faaa662a88929aba1305469439fa228064fcf2fc97a",
-    "addresses.csv": "87e0ca55aa9ffc9fee9f8da574c6f2a4a95eb7578357b42daf2f1c8d5f708a6b",
-    "facilities.csv": "cd4583e04e1458f432a528fe23e71fed1828e5fdcb9b8a3b2c0507d6eab42c9c",
-    "facilities_flat.csv": "802b6ca2cc13191a3b45325e2f96a257c10fad45e63008f7c869f574c1a3dec8",
+    "address_specialities.csv": "091eb2a9a56b5c50e5928e62fd4cefa11ea8696d4e7fedc53295929c5f11a644",
+    "addresses.csv": "76059d32fccea367c9d53ee69688a9199e0eeb702e4e7d5e5d9f55038b5066fd",
+    "facilities.csv": "7fa0c84bc59bd1fc7b7a0508e17261d086d3dafd2b3c35828dca9f47881cf08a",
+    "facilities_flat.csv": "79299761c1ce3d39ecbe5423396258805ccebae571f61ef3e941b70715392e7d",
     "failed_codes.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "hisbg_uin_state.sqlite3.gz": "32ae05af687786fb999334b874730c5bd3e5c8726a4bc80c63820feb5b3860d7",
-    "manual_review.csv": "b6a585fcaab466a0617fe825a9badbc216bf9567ec8c30018907a51f538c4015",
-    "medical_staff.csv": "f734727578b5705b6555bb35d5adca62ca8e91261930d3b70bb1da6c086b6a28",
-    "owners.csv": "601d52aab3b393743709a4d218a65ff6b6776d91e241109b77da9fff9a205872",
-    "processed_codes.txt": "bd5c348892b94c15903541f8244096d04cbaf9a72ab5de53969afaec10388cb5",
-    "search_status.csv": "9e4edacf86c2bae3a1a94259c4153e394c8e204f41380c1aed63a16a312885f3",
-    "staff_specialities.csv": "9087d28bdd973600c9c78515f1295991a267f8eb496c13b4708466dd06fe97f2",
-    "status.json": "849dc965a12f92c6b0a080e0d3fefc19798e10aa1f6c60ba84c49d571e0cad46",
-    "uin_facility_doctor_match.csv": "0fa8db2d37057acb55ea5e9821d3de19d7f75f4c00b546fc40cc0613aa435359",
-    "uin_facility_doctor_match.xlsx": "51f8d278194d1fdddff6e28cb2ce7285508362a3d1fdc4d28c7de38eca0b5dea",
-    "uin_facility_links.csv": "83346ecf5591b008e40530935e18dc1760edd465abcff71b1cdfed93fee024a8"
+    "hisbg_uin_state.sqlite3.gz": "ee39bfc2bc7b27356715112d8d8b885aff3d89a5d71f9d1832362939231b931f",
+    "manual_review.csv": "225d31497589ca6efadcbdd8e41dfb7055087e99a4f22ed6776d0aae2c4e7b43",
+    "medical_staff.csv": "9bac620b68f1fa3e4c3ee0907f3a6d9763994d4f6c8c12a3e4d3436e7f6b4995",
+    "owners.csv": "341b9eeb70bd5c736413e4b8cb9e9e4311a5b0c11f4ad992d20e4cb1661b266d",
+    "processed_codes.txt": "440d90eded45c66769970c1b0e8877a10684735b07def49ff5a88fb32f57286a",
+    "search_status.csv": "0c4328195da6438954b4ca78787273fea4782fd9d8ba8ce120f4ecda6c76f585",
+    "staff_specialities.csv": "3c256494747dc0bb52f5177f644665132656d1c2f89ac3169a10731a9d88d21b",
+    "status.json": "246f857ba259b75a81395444bda3b78c54da4847d0bc09a9aae43771df47e385",
+    "uin_facility_doctor_match.csv": "d85873a60a6cc62fadfb357d09911c45347fc264b3248b7c67e3d30d8465de78",
+    "uin_facility_doctor_match.xlsx": "e5cbc9f753b2f0d1d15cc8250f32b946ec39d77039d46d73e261a04ae23b5949",
+    "uin_facility_links.csv": "b7583493d690e7e80e09a5eb79186e1c70f95eb960ca34be9f4373907381232c"
   }
 }
