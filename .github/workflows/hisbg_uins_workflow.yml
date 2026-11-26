@@ -1,0 +1,125 @@
+name: (his.bg) BLS UIN to HIS Registry Scraper
+
+on:
+  schedule:
+    # Daily check for new BLS UINs / deferred work; each UTC month refreshes all UINs.
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+    inputs:
+      retry_deferred:
+        description: 'Retry UINs that already failed today (normally leave unchecked)'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: hisbg-uin-registry-writer
+  cancel-in-progress: false
+
+jobs:
+  run-pipeline:
+    # The existing repository uses main; use its configured default branch.
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    env:
+      PYTHONUNBUFFERED: '1'
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+    steps:
+      - name: Checkout latest default branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'requests>=2.32,<3' 'openpyxl>=3.1,<4'
+
+      - name: Scrape BLS UINs and save verified checkpoint
+        id: scrape
+        env:
+          RETRY_DEFERRED: ${{ inputs.retry_deferred || false }}
+        run: |
+          set -euo pipefail
+          args=(--max-seconds 18000 --max-uins 5000)
+          if [ "$RETRY_DEFERRED" = true ]; then
+            args+=(--retry-deferred)
+          fi
+          python -B hisbg_scraper/scraper_uin_hisbg.py "${args[@]}"
+
+      - name: Commit verified progress, even after a graceful API stop
+        id: save
+        if: ${{ !cancelled() && (steps.scrape.outcome == 'success' || steps.scrape.outcome == 'failure') }}
+        run: |
+          set -euo pipefail
+          output='hisbg_scraper/hisbg_uin_outputs'
+          if [ ! -f "$output/manifest.json" ]; then
+            echo 'No verified checkpoint to commit.'
+            exit 1
+          fi
+          python -B hisbg_scraper/scraper_uin_hisbg.py --verify-output
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add -A -f -- "$output"
+          if git diff --cached --quiet; then
+            echo 'No new checkpoint changes.'
+          else
+            git commit -m 'Auto-save: BLS UIN to HIS registry checkpoint'
+            pushed=false
+            for attempt in 1 2 3; do
+              if ! git pull --rebase origin "$DEFAULT_BRANCH"; then
+                git rebase --abort || true
+                echo 'Concurrent output changes or rebase conflict. Refusing to force-push.'
+                exit 1
+              fi
+              if git push origin "HEAD:refs/heads/$DEFAULT_BRANCH"; then
+                pushed=true
+                break
+              fi
+              sleep "$((attempt * 10))"
+            done
+            if [ "$pushed" != true ]; then
+              echo 'Could not persist checkpoint to GitHub.'
+              exit 1
+            fi
+          fi
+
+      - name: Report progress
+        if: ${{ !cancelled() && steps.save.outcome == 'success' }}
+        run: |
+          cat hisbg_scraper/hisbg_uin_outputs/status.json
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+          s = json.loads(Path('hisbg_scraper/hisbg_uin_outputs/status.json').read_text())
+          print('## BLS UIN to HIS registry')
+          print(f"Cycle: {s['cycle']}")
+          print(f"Completed: {s['completed_this_cycle']:,} / {s['total_uins']:,}")
+          print(f"Pending: {s['pending_uins']:,}; deferred: {s['deferred_uins']:,}")
+          print(f"Stop reason: {s['stop_reason']}")
+          print(f"Current exact roster-UIN links: {s['confirmed_current_links']:,}")
+          PY
+
+      - name: Dispatch next batch only after successful persistence
+        if: ${{ success() && steps.scrape.outcome == 'success' && steps.save.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if python -c 'import json; from pathlib import Path; s=json.loads(Path("hisbg_scraper/hisbg_uin_outputs/status.json").read_text()); raise SystemExit(0 if s["continue_required"] else 1)'; then
+            echo 'Batch/runtime limit reached; queueing next run.'
+            gh workflow run hisbg_uin.yml --ref "$DEFAULT_BRANCH" -f retry_deferred=false
+          else
+            echo 'No immediate continuation required. Daily schedule handles deferred work and new BLS UINs.'
+          fi
